@@ -1,0 +1,220 @@
+# Handover
+
+For whoever picks this up next. Read [VISUAL_DESIGN.md](VISUAL_DESIGN.md) §7 before changing
+anything that affects the look, and [QUALITY_REPORT.md](QUALITY_REPORT.md) §2 for the ranked list
+of what is still wrong.
+
+---
+
+## 1. Design philosophy
+
+Four rules the codebase is built around. Breaking them will make things worse, not faster.
+
+1. **Configuration is data, code is behaviour.** Every number that affects the look lives in
+   `src/config/visual.ts`; every number that affects feel lives in `src/config/gameplay.ts`. No
+   system hardcodes a colour, an intensity or a timing. The debug panel writes to those same
+   objects and calls the same `refresh()` paths used at boot — there is no second rendering path
+   that can drift.
+
+2. **Events, not references.** `src/core/EventBus.ts` is the spine. The weapon does not know the
+   HUD, the audio engine or the VFX system exist; it emits `weapon:fired` and everyone reacts on
+   the same frame. This is *why* the flash, the light, the smoke, the casing, the tracer, the
+   impact and the report are synchronised — not by scheduling, but structurally.
+
+3. **Fixed budgets, no per-frame allocation.** Every pool is allocated at construction and never
+   grows. Nothing in an update loop calls `new`. When a pool is full the oldest entry is recycled.
+
+4. **Every light has a fixture; every fixture is chamfered.** Free-floating light and sharp 90°
+   edges are the two fastest ways to make a 3D scene look untextured.
+
+---
+
+## 2. Where the game loop is
+
+**`src/app/Game.ts` → `renderFrame(now)`.** One function, ten commented steps. The order is a
+contract:
+
+```
+1  input drain
+2  mission director (owns the camera only during the intro)
+3  player movement -> camera transform
+4  weapon animation        <- MUST follow 3, or the view-model lags a frame
+5  enemies + AI fire
+6  world reactions (explosives, wind, practicals, level, lighting, sky)
+7  VFX                     <- MUST follow 4, or the muzzle flash lags a frame
+8  audio listener
+9  mission state + HUD
+10 planar reflection, then the main render
+```
+
+Steps 4 and 7 following 3 is not stylistic. Move them and the weapon visibly "swims".
+
+---
+
+## 3. Scene construction flow
+
+`Game.boot()` runs six awaited stages so the loader keeps painting:
+
+```
+installFogPatch()          <- MUST be first: it overrides three's ShaderChunks
+  -> RenderSystem          (renderer + all post targets)
+  -> TextureFactory        (procedural PBR sets)  -> MaterialLibrary
+  -> SkyDome -> Lighting   (Lighting reads sunDirection from SkyDome)
+  -> HarborLevel           (PropKit -> LevelBuilder -> merged static batches
+                            + Practicals + WetGround + DistantScenery)
+  -> PlayerCamera, Player, EnemyManager, Explosives
+  -> VfxManager, WeaponController, Ballistics
+  -> Hud, MissionDirector, DebugPanel, Input
+```
+
+`HarborLevel`'s constructor calls `buildBay/Canyon/Yard/Warehouse/Quay/PierHead`, each of which
+queues geometry into `LevelBuilder`; `builder.build(collision)` merges it and registers collision.
+
+---
+
+## 4. Asset management
+
+There are no asset files. Everything is generated:
+
+- **Textures** — `TextureFactory` memoises every set by key. `dispose()` releases them.
+- **Geometry** — `PropKit` caches by key so a container built ten times shares one buffer.
+- **Audio** — `AudioEngine` builds one noise buffer and one procedural impulse response at first
+  user gesture; every sound is assembled from oscillators and filters at play time.
+
+Every system owns a `Disposer` (`src/core/Disposal.ts`) and `Game.dispose()` unwinds all of it,
+including event listeners and the `ResizeObserver`. This is wired to `beforeunload` and to Vite's
+HMR dispose hook.
+
+---
+
+## 5. Weapon pipeline
+
+```
+Input.firing
+  -> WeaponController.setTrigger
+  -> updateFiring() rate-limits, checks state, applies spread
+  -> fire()  : decrement ammo, sample the ANIMATED muzzle position,
+               apply cone spread, kick camera + weapon springs,
+               emit weapon:fired
+        |
+        +-- VfxManager.onWeaponFired : flash quad + world light + smoke + casing
+        +-- AudioEngine.playWeaponFire : crack + body + thump + mech + reverb
+        +-- Ballistics.firePlayerShot : hitscan world & enemies, spawn tracer,
+                                        emit impact:surface / impact:enemy
+                |
+                +-- VfxManager.onImpact : per-material sparks/dust/chunks/decal
+                +-- AudioEngine.playImpact : per-material filter + panel ring-out
+                +-- Explosives.registerImpact : proximity damage to drums
+```
+
+The muzzle position is read from the animated model, so recoil, sway and bob all move the flash
+and the tracer origin with the gun.
+
+The pose is composed additively in `composePose()` from six independent layers. To debug the
+feel, zero one layer at a time — they cannot fight each other.
+
+---
+
+## 6. VFX management
+
+`VfxManager` owns everything and subscribes to the bus in `bindEvents()`. It exposes three
+callbacks the game wires to world systems, which is how VFX reach out without importing them:
+
+```ts
+vfx.onGroundRipple = (x, z, s) => level.wetGround.addRipple(x, z, s);
+vfx.onLampShock    = (p, power) => level.practicals.applyShock(p, power);
+vfx.onCameraShake  = (amp, freq) => view.addShake(amp, freq);
+```
+
+`ParticleSystem` has two instanced batches (additive, lit). Adding a new effect means adding a
+`ParticleSpec` to the `SPEC` table at the bottom of `VfxManager.ts` — not a new class.
+
+---
+
+## 7. Config file map
+
+| File | Owns |
+| --- | --- |
+| `src/config/visual.ts` | Everything that affects the look |
+| `src/config/gameplay.ts` | Player, weapon, enemy, mission tuning |
+| `src/config/quality.ts` | The three presets + auto-detect + URL override |
+| `src/config/input.ts` | Key bindings |
+| `src/effects/ImpactPresets.ts` | Per-material impact response |
+| `src/effects/VfxManager.ts` (`SPEC`) | Particle presets |
+
+---
+
+## 8. Performance notes
+
+See [PERFORMANCE.md](PERFORMANCE.md). The three things most likely to bite you:
+
+1. **Adding a light is a per-pixel cost across the whole screen.** Forward rendering evaluates
+   every light for every lit fragment. Prefer an emissive fixture.
+2. **Adding a shadow-casting light is a whole extra scene render.**
+3. **Adding an unmerged mesh multiplies by the number of scene traversals** (currently four).
+
+---
+
+## 9. Placeholder / provisional implementations
+
+Honestly labelled, because these look finished but are not:
+
+| Area | What is provisional |
+| --- | --- |
+| Enemy AI | Two-point strafe lane + burst fire. No navmesh, no cover selection, no reaction to being flanked. Intentional per the brief, but it is a stub |
+| Enemy animation | Rigid parts driven by sines. No skinning, no IK, no blending |
+| Physics | Custom AABB resolve + per-system integrators. No rigid-body solver; casings, debris and lamps each run their own tiny integrator |
+| Destruction | Only the fuel drums. They hide rather than fracture |
+| Audio | Fully synthesised. Structurally correct but does not sound like recorded firearms |
+| Death / fail state | Camera settles, end card appears. No death animation |
+| Mission completion | Distance to pad + hostiles ≤ 2. No extraction vehicle or sequence |
+| Decals | Camera-agnostic quads offset along the normal, not projected. Fine on planar surfaces, wrong on curved ones |
+| Motion blur | Camera-rotation approximation, no velocity buffer. Moving objects do not blur |
+| DoF | Single-pass poisson gather in the composite; no separate near/far fields or bokeh shaping |
+
+---
+
+## 10. Refactoring candidates
+
+1. **`HarborLevel.ts` is ~700 lines** of authored layout. Split per zone into
+   `environment/zones/*.ts` with a shared context object.
+2. **`VfxManager.ts` does orchestration *and* owns tracers, casings and shockwaves.** Extract
+   those into `effects/Tracers.ts`, `effects/Casings.ts`, `effects/Shockwaves.ts`.
+3. **`Game.ts` wiring** — `wireEvents()` is a long list of subscriptions. A small
+   `systems/AudioBindings.ts` and `systems/WorldReactionBindings.ts` would shorten it.
+4. **`LevelBuilder` merge buckets** should be spatial, not authored-zone based (restores culling).
+5. **`Game.weaponReloadFraction`** reaches into `WeaponController` private state through a cast.
+   Expose a real `reloadProgress` getter.
+6. **`Practicals`** conflates fixtures, flicker, beacons and pendulum lamps. Split into
+   `FixtureRegistry` + `FlickerController` + `PendulumLamps`.
+
+---
+
+## 11. Do not break these
+
+1. `installFogPatch()` runs before any material compiles.
+2. Metre-scale UVs on all new geometry.
+3. The roughness floors (wet 0.32, gun metal 0.28).
+4. `ambient.intensity` ≥ ~1.0.
+5. The view-model camera shares near/far with the world camera.
+6. Luminance-normalised split-toning in the composite.
+7. Camera shake never touches yaw or pitch — position and roll only.
+8. `chamferBox`, never `BoxGeometry`, for hard surfaces.
+
+---
+
+## 12. Suggested next work, in order
+
+1. **Confirm the VFX on screen** (QUALITY_REPORT P6). Fire at a container at 5 m, blow a drum
+   cluster, capture frames. Everything is wired; it is unproven.
+2. **Fix the puddle reflections** (P2). The biggest visual investment currently under-delivers.
+3. **Split the practical palette into warm and cool zones** (P1). Largest first-impression win
+   available for the least work.
+4. **Add a view-model light** (P5). One light, big improvement to the hero asset.
+5. **Give the sky cloud structure near the horizon** (P3).
+6. **Validate frame rate on real hardware** and re-tune the presets. Everything in
+   PERFORMANCE.md about absolute frame times is currently unproven.
+7. **Play the full 90 seconds** with real pointer lock: enemy fire, damage, death, extraction.
+8. **Improve enemy joints** (P4) — overlapping gear at hips and knees, or skinning.
+9. **Spatial merge buckets** in `LevelBuilder` (P7).
+10. **Fix the emissive baseline bug** in `Practicals.update()` (P8).
