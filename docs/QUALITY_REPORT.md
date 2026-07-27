@@ -123,91 +123,138 @@ skyline and the sea dissolve into one atmosphere.
 opaque pass — it had been drawn first, shading every pixel before being fully overdrawn — and its
 noise octaves were halved.
 
-### P4 — Enemies are crude at close range
+### P4 — Enemy joints (FIXED)
 
-**Problem.** Rigid, un-skinned parts; at under ~8 m the shoulder and hip joints visibly separate.
-**Cause.** Deliberate — the brief asked for minimal enemies — but it becomes the weakest asset on
-screen when one is close.
-**Priority.** Medium.
-**Fix.** Either skinned meshes with a simple 12-bone rig, or keep rigid parts and cover the joints
-with overlapping gear (shoulder pads already do this; hips and knees do not).
-**Files.** `src/enemies/EnemySoldier.ts`.
-**Verify.** Walk to 3 m from a hostile and orbit.
+**Was.** Rigid, un-skinned parts whose shoulders and hips visibly separated under ~8m.
+
+**Root cause.** Box limbs with FLAT ends at the pivots. Every degree of rotation swung a square
+corner away from its neighbour and opened a wedge.
+
+**Fixed by the SHAPE, not the size** — inflating the boxes until the gaps closed would have given
+swollen, toy-like limbs, which the brief explicitly warned against:
+
+- every bone is a capsule positioned so its end-cap hemisphere centres sit exactly on the two
+  pivots it spans. Rotating about a pivot is then a rotation of a sphere about its own centre —
+  geometrically invariant — so a gap is impossible at any angle;
+- pauldrons and a collar ring parented to the TORSO, so they stay put while the arm swings beneath
+  them, which is what a real pauldron does;
+- a trouser skirt on the pelvis overlapping both thigh caps — the hips are the one joint a capsule
+  cannot close alone, because two bones share one parent volume;
+- neck column with a sphere at the head pivot; knee pads straddling the knee; boots and gloves
+  overlapping the shin and forearm caps;
+- pivots moved inside the limb mass instead of sitting on the outer surface.
+
+**Inspection also exposed a larger problem.** The soldiers were borrowing the WEAPON materials:
+near-black, tiled at 26–48 repeats per metre for centimetre-scale gun parts. On a 1.8m figure that
+is a featureless mannequin at any distance. They now have their own fatigue and gear fabrics at
+~3.4 and 5.5 tiles/m. The arms were also splayed because the Z tuck term had the wrong sign on the
+right arm; both hands now converge on the weapon.
+
+**What was actually checked.** With `?posetest=1` (four hostiles at 2/4/8/12m, AI frozen) plus
+`?exposure=5.5` to see them lit rather than as silhouettes, in the idle, aiming/firing and death
+poses, and in normal play at ~4m, ~8m and ~12m. Shoulders, elbows, wrists, hips, knees, ankles and
+neck all read as continuous. The death topple — where a rigid rig most often falls apart — holds
+together.
+
+**What is still not right.** The figure is still visibly a rigid-part character on close
+inspection: limbs are smooth capsules with no cloth deformation, and there is no skinning. The
+fix cost roughly 100 draw calls and 40k triangles across 11 hostiles.
 
 ### P5 — Weapon flat in shadow (FIXED)
 
 **Was.** Under the canopy the rifle was a near-black silhouette with no internal form.
-**Cause.** Correct PBR behaviour — it genuinely is in shadow — but bad presentation. Every
+**Cause.** Correct PBR behaviour - it genuinely is in shadow - but bad presentation. Every
 first-person game cheats this the same way.
 **Fixed by.** One directional light confined to the `VIEWMODEL` layer, rigged up-and-left of the
 lens. It cannot touch world lighting and costs one light over a few thousand pixels. Verified: the
-receiver, rail and handguard now read as separate planes at the spawn point.
+receiver, rail and handguard read as separate planes at the spawn point.
 
-### P6 — Explosion readability, after the over-brightness fix
+### P6 — Explosion brightness (RE-VERIFIED)
 
-**Problem.** The blast light was reduced from 5200 to 1500 cd after a captured frame showed it
-clipping the whole screen to white, but the corrected value has **not** been re-verified in a
-capture. It may now be under-powered.
-**Cause.** Tuned analytically (1/d² against the ACES shoulder), not visually.
-**Priority.** Medium-high.
-**Fix.** Detonate the canyon drum pair and the four-drum fuel dump and check both: the blast should
-dominate the frame without erasing it, and the chain reaction should stagger visibly.
-**Files.** `src/config/visual.ts` (`explosion.*`), `src/effects/VfxManager.ts` (`SPEC.fireball`).
-**Verify.** The frame stays readable; the silhouette of nearby cover survives the flash.
+**Was.** At 5200 cd the blast clipped the entire frame to white. Reduced to 1500 analytically, but
+unverified.
 
-### P7 — No LOD and no occlusion culling
+**Now verified on screen** using `?boom=0.5` (a charge 7m ahead every 0.5s, phase-independent so it
+runs on the static attract view where nothing else perturbs the scene). Captured the flash frame
+and the recovery frame:
 
-**Problem.** Merging per (zone, material) keeps draw calls low but defeats per-object frustum
-culling; the whole zone draws if any part is visible.
-**Priority.** Medium (it is a performance issue, see [PERFORMANCE.md](PERFORMANCE.md)).
-**Fix.** Split the merge buckets by a coarse spatial grid rather than by authored zone.
-**Files.** `src/environment/LevelBuilder.ts`.
+| Check | Result |
+| --- | --- |
+| First bright frame | Dominates the frame without erasing it |
+| Clips to white? | **No.** Container corrugation, the catwalk hostile, the crane lattice, the barriers and the sky gradient all remain readable through the flash |
+| Surrounding illumination | The blast lights the deck, the containers and the crane — it reaches the world, not just the screen |
+| Bloom | A bright core with a warm halo, not a screen-wide bleed |
+| Exposure response | Auto-exposure does not crush the rest of the frame; the sky stays cool |
+| Recovery | Falls off cleanly to a warm pool, leaving the scorch decal ring |
+| Too weak now? | No |
 
-### P8 — Emissive flicker has an accumulation bug
+**What is still not right.** The flash is fairly UNIFORM across the frame rather than falling off
+sharply with distance, so it reads slightly like a global tint at its peak. Smoke is also not
+prominent during the flash itself — the fireball reads, the smoke column does not.
 
-**Problem.** `Practicals.update()` reads `mat.userData.baseEmissive` *after* assigning
-`emissiveIntensity`, so the baseline captures an already-modified value; flickering emissives can
-drift toward zero over a long session.
-**Priority.** Low-medium (only visible over minutes).
-**Fix.** Capture the baseline when the fixture is created.
-**Files.** `src/environment/Practicals.ts`.
+### P7 — LOD and culling (PARTIALLY ADDRESSED)
 
----
+Implemented: shadow-caster culling by distance (a batch outside the sun's ortho box cannot
+contribute a shadow texel, yet was still being submitted), enemy animation LOD (distant hostiles
+solve their pose every third frame at 3x dt, so the rate is unchanged and nothing pops), and
+distance visibility beyond 110m.
+
+**Not done:** geometric LODs, and the merge buckets are still authored-zone based rather than
+spatial, so a whole zone draws if any part of it is visible. Measured 660 → 638 draw calls; the
+shadow cull recovers little at the SPAWN viewpoint specifically because most of the level is still
+inside the 71m window there.
+
+### P8 — Emissive flicker accumulation (FIXED)
+
+Two compounding faults, not the one originally reported:
+1. the baseline was read from `material.userData` *after* this frame's value had already been
+   written to that same material, so it drifted upward;
+2. emissive materials are cached and SHARED between fixtures of the same colour, so several
+   flickering fixtures were writing to one material and capturing each other's output.
+
+Each flickering fixture now clones its emissive material and stores an immutable `baseEmissive`
+captured at registration; every frame derives from the base values, never the current ones.
+`setMasterScale` also wrote light intensity directly while the flicker loop wrote the same
+property — it is now a multiplier the loop applies, so there is exactly one writer.
 
 ## 3. Before/after comparison, same camera
 
 Compared from the identical viewpoint (mission start, standing, looking east down the berth) with
-the HUD hidden, before and after the P1/P2/P3 work.
+the HUD hidden. "Pass 1" is the palette/puddle/sky work; "Pass 2" is enemies, the kerb, colour
+rebalance, explosion, flicker and LOD.
 
-| Criterion | Before | After | What actually changed |
-| --- | --- | --- | --- |
-| First impression | 6.5 | **7.5** | The frame now has a subject (warm lit yard) inside a cool frame, instead of one orange wash |
-| Colour depth | 4 | **7.5** | Two light families + white balance + cool fill. Warm and cool now sit against each other in depth |
-| Atmosphere | 7 | **8** | Haze band ties dome, skyline and sea together; the join is gone |
-| Reflection presence | 3 | **7.5** | Pools are legible, mirror the containers and the sodium lamps, and distort with the ripples |
-| Cloud / horizon naturalness | 3 | **7.5** | Two parallaxing decks, layered strata into the horizon, a directional storm mass |
-| Composition | 7 | 7 | Unchanged — the layout was never the problem |
-| Materials | 6 | **6.5** | Cooler ambient separates metal from concrete better; texel density unchanged |
-| Environment density | 7 | 7 | Unchanged |
-| Sense of scale | 7 | **7.5** | The cloud decks and haze band add a legible distance ladder |
-| Weapon presentation | 5.5 | **7** | The view-model light restores form in shadow (P5) |
-| Effects | 5 | **6** | Verified on screen this pass: impacts, decals, casings, explosions |
-| Readability | 7 | **7.5** | Cool ambient reads shadow detail better than the old brown |
-| Consistency | 6 | **6.5** | The view-model is still noticeably ahead of the enemies |
-| Motion quality | 6.5 | 6.5 | Unchanged |
-| Movement stability | — | **7** | Puddle coverage is now distance-stable, so the deck no longer changes character as the player walks |
+| Criterion | Original | Pass 1 | Pass 2 | What changed in pass 2 |
+| --- | --- | --- | --- | --- |
+| First impression | 6.5 | 7.5 | **8** | The deck is now continuous - the "step" was a raised kerb cutting the frame in half |
+| Colour depth | 4 | 7.5 | **8** | Warmth restored through sources, not a global shift; neutrals no longer blue |
+| Atmosphere | 7 | 8 | 8 | Unchanged |
+| Reflection presence | 3 | 7.5 | **8** | Water depth now drives reflection, so pools have shallow rims and deep mirror centres |
+| Cloud / horizon | 3 | 7.5 | 7.5 | Unchanged |
+| Composition | 7 | 7 | **7.5** | Removing the kerb band restored the opening shot's depth |
+| Materials | 6 | 6.5 | **7** | Soldiers got real fabrics instead of the weapon's near-black micro-tiled material |
+| Environment density | 7 | 7 | 7 | Unchanged |
+| Sense of scale | 7 | 7.5 | 7.5 | Unchanged |
+| Weapon presentation | 5.5 | 7 | 7 | Unchanged |
+| Effects | 5 | 6 | **7** | Explosion verified: powerful without clipping; flicker no longer drifts |
+| Readability | 7 | 7.5 | 7.5 | Unchanged |
+| Consistency | 6 | 6.5 | **7.5** | The enemies were the weakest asset; the gap to the view-model is much smaller |
+| Motion quality | 6.5 | 6.5 | **7** | Joints hold together through walk, aim, flinch and death |
+| Movement stability | - | 7 | 7.5 | Puddle coverage distance-stable; shadow/animation LOD introduce no pop |
 
-**Overall: 6.4 → 7.2 / 10 against the genre standard.**
+**Overall: 6.4 → 7.2 → 7.6 / 10** against the genre standard.
 
-The score moved because the image measurably changed, not to record effort. Three of the four
-largest complaints — no colour depth, no reflection presence, no sky structure — are resolved and
-visible in a still frame. What holds it below ~8 is unchanged: the enemies are crude close up, the
-texel density is inconsistent, and there is no LOD or occlusion strategy.
+The score moved because the rendered result changed, not because tasks were completed. The two
+largest single gains were finding that the "puddle step" was a piece of geometry and that the
+soldiers were wearing gun metal - both were misdiagnosed until a frame was actually examined.
 
-Caveats on this comparison, stated plainly:
-- it was done by me from before/after captures at one viewpoint, not blind, and not against any
-  reference material (none was provided);
-- the captures are at 800x967 in the development browser, not at 1080p on target hardware.
+What still holds it below ~8.5: the characters are rigid-part with no skinning or cloth, texel
+density is inconsistent between large surfaces and small props, there are no geometric LODs, and
+the merge buckets are not spatial.
+
+Caveats, stated plainly:
+- these are my own before/after captures at one viewpoint plus two others, not blind, and not
+  against any reference material (none was supplied);
+- captures are at 800x967 in the development browser, not 1080p on target hardware.
 
 ## 4. Limits I could not get past in this environment
 
