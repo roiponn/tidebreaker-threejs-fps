@@ -516,7 +516,7 @@ export class Game {
     this.explosives.update(dt, elapsed);
     updateWind(elapsed, dt);
     this.level.update(dt, elapsed, this.view.camera.position);
-    this.lighting.update(this.view.camera.position);
+    this.lighting.update(this.view.camera.position, this.view.camera.quaternion);
     this.sky.update(elapsed, this.view.camera.position);
     const flash = this.level.distant.battleFlash;
     this.sky.setFlash(flash.strength, flash.direction, flash.color);

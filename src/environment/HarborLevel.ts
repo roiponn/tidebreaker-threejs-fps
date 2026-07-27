@@ -73,7 +73,7 @@ export class HarborLevel {
 
   constructor(
     private readonly mats: MaterialLibrary,
-    visual: MutableVisual,
+    private readonly visual: MutableVisual,
     quality: QualitySettings,
     private readonly collision: CollisionWorld,
   ) {
@@ -443,7 +443,7 @@ export class HarborLevel {
     this.practicals.addFloodlight(
       new THREE.Vector3(36.2, 5.9, -8.4),
       new THREE.Vector3(33, 0, -5.4),
-      { intensity: 30, angle: 0.44, instability: 0.7 },
+      { intensity: 420, angle: 0.44, instability: 0.7, color: this.visual.practicals.floodColorWarm },
     );
 
     // Pipes running along the ground beside the catwalk.
@@ -599,10 +599,12 @@ export class HarborLevel {
       const wl = this.kit.wallLight();
       this.prop(zone, wl.pieces, trs(lx, 7.2, zFace - 0.35, 0, Math.PI, 0));
       if (lit) {
+        // Mercury/LED family: the warehouse side of the yard is cold, so the
+        // player crosses a warm/cool boundary as they move up the berth.
         this.practicals.addFloodlight(
           new THREE.Vector3(lx, 6.9, zFace - 1.0),
           new THREE.Vector3(tx, 0, 1.5),
-          { angle: 0.6, intensity: 760 },
+          { angle: 0.6, intensity: 760, color: this.visual.practicals.floodColorCool },
         );
       }
     }
@@ -697,7 +699,7 @@ export class HarborLevel {
     this.practicals.addFloodlight(
       new THREE.Vector3(56.8, 4.4, 2.6),
       new THREE.Vector3(53, 0, -2),
-      { angle: 0.5, intensity: 40, color: 0xbfe0ff },
+      { angle: 0.5, intensity: 620, color: this.visual.practicals.floodColorCool },
     );
 
     this.prop(zone, this.kit.sandbagWall(3.0, 3, 5150), trs(50.4, 0, 1.6, 0, Math.PI / 2, 0), {
@@ -795,6 +797,7 @@ export class HarborLevel {
     aim: THREE.Vector3,
     instability: number,
     lit = true,
+    color?: number,
   ): void {
     const mast = this.kit.floodlightMast(height);
     this.prop('lights', mast.pieces, trs(base.x, base.y, base.z, 0, Math.atan2(aim.x - base.x, aim.z - base.z), 0), {
@@ -807,7 +810,7 @@ export class HarborLevel {
       base.y + mast.headOffset.y,
       base.z + dir.z * mast.headOffset.z,
     );
-    if (lit) this.practicals.addFloodlight(head, aim, { instability });
+    if (lit) this.practicals.addFloodlight(head, aim, { instability, color });
   }
 
   // ------------------------------------------------------------------

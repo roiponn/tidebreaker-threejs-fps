@@ -41,6 +41,23 @@ export class WetGround {
   /** Objects hidden while rendering the mirrored view (ground, VFX, HUD-ish). */
   private hiddenDuringReflection: THREE.Object3D[] = [];
   private ownedTextures: THREE.Texture[] = [];
+  private screenWidth = 1280;
+  private screenHeight = 720;
+  /**
+   * Global clip plane used ONLY during the mirrored pass.
+   *
+   * Without it, every object below the water plane gets mirrored to above it
+   * and appears in the reflection. The 900x900m sea plane at y = -1.35 was
+   * being folded up to y = +1.35 and filling most of the reflection with flat
+   * water colour, which is what produced the hard horizontal seam across the
+   * deck and made the reflections look like a solid tint rather than an image.
+   *
+   * The plane stays in `renderer.clippingPlanes` permanently and is disabled by
+   * pushing its constant out of range - changing the ARRAY LENGTH would force
+   * every material in the scene to recompile, every frame.
+   */
+  private readonly clipPlane: THREE.Plane;
+  private static readonly CLIP_DISABLED = 1e5;
 
   constructor(
     materials: MaterialLibrary,
@@ -51,6 +68,7 @@ export class WetGround {
   ) {
     this.quality = quality;
     this.puddleTexture = buildPuddleMask(512);
+    this.clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), WetGround.CLIP_DISABLED);
 
     const base = materials.asphalt();
     this.material = base.clone() as THREE.MeshStandardMaterial;
@@ -88,6 +106,13 @@ export class WetGround {
       uResolution: { value: new THREE.Vector2(1, 1) },
       /** Expanding rings pushed by gameplay: footsteps, impacts, explosions. */
       uImpacts: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
+      /**
+       * Diagnostic view, enabled with ?wetdebug=mask|rough|reflect.
+       * Standing water is authored through three interacting fields (mask,
+       * roughness, reflection) and guessing which one is misbehaving from the
+       * final image does not work - this shows each one directly.
+       */
+      uDebugMode: { value: debugModeFromUrl() },
     };
 
     this.material.onBeforeCompile = (shader) => {
@@ -104,7 +129,7 @@ export class WetGround {
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${GROUND_MASK}`)
         .replace(
           '#include <roughnessmap_fragment>',
-          '#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor * ( 1.0 - uWetness * 0.45 ), 0.035, gPuddle );',
+          '#include <roughnessmap_fragment>\n\t// Water roughness varies with the fine surface field and with local chop,\n\t// so a pool has calm mirror-like centres and duller, wind-ruffled edges\n\t// instead of being one flat mirror.\n\tfloat gViewDist = length( vViewPosition );\n\t// Roughness also grows with DISTANCE: a far water surface covers many\n\t// ripples per pixel so it is physically rougher at that scale, and a\n\t// mirror-smooth surface at a grazing angle aliases badly. It also softens\n\t// the abrupt boundary where the deck passes out from under the loading-bay\n\t// canopy and starts reflecting open sky instead of roof.\n\tfloat gWaterRough = clamp( 0.018 + gSurface * 0.075 + gChop * 1.6 + gViewDist * 0.0035, 0.012, 0.34 );\n\troughnessFactor = mix( roughnessFactor * ( 1.0 - uWetness * 0.45 ), gWaterRough, gPuddle );',
         )
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${GROUND_NORMAL}`)
         .replace('#include <opaque_fragment>', `${GROUND_REFLECTION}\n#include <opaque_fragment>`);
@@ -149,8 +174,12 @@ export class WetGround {
       this.uniforms.uHasReflection.value = 0;
       return;
     }
-    const width = Math.max(64, Math.round(1280 * quality.reflectionScale));
+    // MUST match the main framebuffer's aspect: the reflection is sampled with
+    // normalised screen coordinates, so a target with a different shape maps
+    // the mirrored image onto the deck stretched.
+    const aspect = this.screenWidth / Math.max(this.screenHeight, 1);
     const height = Math.max(64, Math.round(720 * quality.reflectionScale));
+    const width = Math.max(64, Math.round(height * aspect));
     this.reflectionRT = new THREE.WebGLRenderTarget(width, height, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
@@ -234,7 +263,21 @@ export class WetGround {
 
     const previousShadowAuto = renderer.shadowMap.needsUpdate;
     renderer.shadowMap.needsUpdate = false;
+
+    // Clip everything below the water line for this pass only.
+    if (!renderer.clippingPlanes.includes(this.clipPlane)) {
+      renderer.clippingPlanes = [...renderer.clippingPlanes, this.clipPlane];
+    }
+    this.clipPlane.constant = -this.waterLevel + 0.02;
+
     renderer.setRenderTarget(this.reflectionRT);
+    // Clear to the scene's fog colour, not to black. At grazing angles a real
+    // reflection shows distant haze, so where the clipped geometry leaves a
+    // gap near the reflected horizon the correct answer is atmosphere.
+    const fog = scene.fog as THREE.FogExp2 | null;
+    renderer.getClearColor(tmpClearColor);
+    const previousClearAlpha = renderer.getClearAlpha();
+    if (fog) renderer.setClearColor(fog.color, 1);
     renderer.clear(true, true, false);
     // Mirrored geometry winds backwards; flip the front face for this pass.
     const previousFlip = (renderer as unknown as { _reflectionFlip?: boolean })._reflectionFlip;
@@ -243,6 +286,11 @@ export class WetGround {
     gl.frontFace(gl.CW);
     renderer.render(scene, rc);
     gl.frontFace(gl.CCW);
+
+    // Disable the clip plane again by pushing it out of range (never remove it
+    // from the array - that would recompile every material).
+    this.clipPlane.constant = WetGround.CLIP_DISABLED;
+    renderer.setClearColor(tmpClearColor, previousClearAlpha);
     renderer.setRenderTarget(previousSide);
     renderer.shadowMap.needsUpdate = previousShadowAuto;
 
@@ -253,6 +301,12 @@ export class WetGround {
   /** Main framebuffer size in device pixels - gl_FragCoord is measured in it. */
   setScreenSize(width: number, height: number): void {
     (this.uniforms.uResolution.value as THREE.Vector2).set(width, height);
+    const aspectChanged =
+      Math.abs(width / Math.max(height, 1) - this.screenWidth / Math.max(this.screenHeight, 1)) > 0.01;
+    this.screenWidth = width;
+    this.screenHeight = height;
+    // Rebuild the reflection target when the viewport shape changes.
+    if (aspectChanged && this.reflectionRT) this.setQuality(this.quality);
   }
 
   dispose(): void {
@@ -263,6 +317,15 @@ export class WetGround {
     this.puddleTexture.dispose();
     this.reflectionRT?.dispose();
   }
+}
+
+/** ?wetdebug=mask|rough|reflect -> 1 | 2 | 3, otherwise 0. */
+function debugModeFromUrl(): number {
+  const mode = new URLSearchParams(window.location.search).get('wetdebug');
+  if (mode === 'mask') return 1;
+  if (mode === 'rough') return 2;
+  if (mode === 'reflect') return 3;
+  return 0;
 }
 
 /**
@@ -311,21 +374,49 @@ function buildPuddleMask(res: number): THREE.DataTexture {
     return sum / norm;
   };
 
+  const seedC = rng.int(0, 9999);
+
   for (let y = 0; y < res; y++) {
     for (let x = 0; x < res; x++) {
       const u = x / res;
       const v = y / res;
-      const broad = fbm(u * 3, v * 3, 3, seedA, 4);
+
+      // DOMAIN WARP. Straight fbm produces round, evenly-spaced blobs that read
+      // as procedural noise. Warping the sample position with a second noise
+      // field before thresholding gives lobed, interlocking pools with the
+      // uneven outlines standing water actually has. The warp field is itself
+      // periodic, so the mask still tiles.
+      const warpU = fbm(u * 2, v * 2, 2, seedC, 3) - 0.5;
+      const warpV = fbm(u * 2 + 0.37, v * 2 + 0.71, 2, seedC + 61, 3) - 0.5;
+      const wu = u * 3 + warpU * 1.15;
+      const wv = v * 3 + warpV * 1.15;
+
+      const broad = fbm(wu, wv, 3, seedA, 4);
       const detail = fbm(u * 11, v * 11, 11, seedB, 3);
-      // Threshold with a narrow ramp -> defined waterline, not a gradient.
-      const depth = broad * 0.82 + detail * 0.18;
-      const puddle = Math.max(0, Math.min(1, (depth - 0.52) * 6.5));
-      // Damp halo around every puddle: the concrete is darker but not mirrored.
-      const damp = Math.max(0, Math.min(1, (depth - 0.4) * 3.2));
+
+      // fbm output clusters tightly around 0.5, which makes the threshold
+      // hypersensitive. Stretch the distribution so "water level" is a
+      // controllable number rather than a knife edge.
+      const depth = (broad - 0.5) * 1.9 + 0.5;
+
+      // STORE THE HEIGHT FIELD, NOT A THRESHOLDED MASK.
+      //
+      // This is the single most important line in the file. Storing a
+      // pre-thresholded 0/1 puddle mask looks correct up close, but mipmaps
+      // AVERAGE it: at distance every texel becomes the local coverage
+      // fraction (~0.4), so the far deck reads as "40% puddle everywhere"
+      // while the near deck still has crisp pools - and the mip transition
+      // between the two draws a hard horizontal line across the screen.
+      //
+      // Storing the smooth depth field instead means mipmaps blur the FIELD
+      // (which is correct and harmless) and the threshold is applied per-pixel
+      // in the shader, so waterlines stay crisp at any distance.
       const i = (y * res + x) * 4;
-      data[i] = puddle * 255;
-      data[i + 1] = damp * 255;
-      data[i + 2] = detail * 255;
+      data[i] = Math.max(0, Math.min(1, depth)) * 255;
+      data[i + 1] = detail * 255;
+      // Fine surface variation, used to break up the water roughness so the
+      // pools are not uniformly mirror-smooth.
+      data[i + 2] = fbm(u * 23, v * 23, 23, seedB + 5, 2) * 255;
       data[i + 3] = 255;
     }
   }
@@ -352,9 +443,12 @@ uniform float uRainAmount;
 uniform float uWetness;
 uniform vec2 uResolution;
 uniform vec4 uImpacts[ 8 ];
+uniform float uDebugMode;
 
 float gPuddle;
 float gDamp;
+float gSurface;
+float gChop;
 vec2 gRipple;
 
 float gHash( vec2 p ) {
@@ -397,10 +491,48 @@ vec2 impactRipple( vec2 world ) {
 `;
 
 const GROUND_MASK = /* glsl */ `
-  vec2 gMaskUv = vGroundWorld.xz * 0.082;
-  vec3 gMask = texture2D( uPuddleMask, gMaskUv ).rgb;
-  gPuddle = clamp( gMask.r * uWetness * 1.25, 0.0, 1.0 );
-  gDamp = clamp( gMask.g * uWetness, 0.0, 1.0 );
+  // TWO SCALES. One 17m tile carries the large pools, a second 5.3m tile
+  // (rotated, so the two lattices never line up) carries small puddles and
+  // erodes the edges of the large ones. Sampling a single tile made the
+  // repeat obvious the moment the player walked more than a tile's width.
+  // 12.5m repeat, offset so the pool layout is not centred on the level origin
+  // (the player spawn sat inside a single large pool, which reads as a flat
+  // sheet rather than as standing water).
+  vec2 gUvBig = ( vGroundWorld.xz + vec2( 6.3, -4.1 ) ) * 0.080;
+  vec2 gRot = vec2( 0.86, 0.51 );
+  vec2 gUvSmall = vec2(
+    vGroundWorld.x * gRot.x - vGroundWorld.z * gRot.y,
+    vGroundWorld.x * gRot.y + vGroundWorld.z * gRot.x
+  ) * 0.235;
+
+  // R = smooth depth field, G = detail field, B = fine surface variation.
+  vec3 gBig = texture2D( uPuddleMask, gUvBig ).rgb;
+  vec3 gSmall = texture2D( uPuddleMask, gUvSmall ).rgb;
+
+  // ONE field, PERTURBED - not a weighted average of two.
+  //
+  // Averaging two independent fields shrinks the combined variance (the sum of
+  // independent variables is more tightly clustered than either), which pushes
+  // the whole distribution against the threshold and makes coverage swing wildly
+  // for a tiny change in water level. Perturbing a single normalised field keeps
+  // its distribution, so the histogram normalisation above still holds and the
+  // authored coverage is the coverage you get.
+  float gDepth = gBig.r;
+  // The second scale erodes and adds to the outlines so a pool is never a clean
+  // copy of the texture, and the two lattices never line up into a repeat.
+  gDepth += ( gSmall.r - 0.5 ) * 0.30;
+  // Ragged waterline from the detail field.
+  gDepth += ( gBig.g - 0.5 ) * 0.11 + ( gSmall.g - 0.5 ) * 0.05;
+
+  // The field is histogram-normalised at build time so 0.5 IS the authored
+  // coverage AND the value mipmaps converge to. Keeping the level near 0.5 is
+  // exactly what makes puddle coverage distance-stable; wetness only nudges it.
+  float gLevel = mix( 0.545, 0.495, uWetness );
+  // Threshold AFTER filtering -> crisp waterlines at every distance.
+  gPuddle = smoothstep( gLevel, gLevel + 0.045, gDepth );
+  // Damp halo: a wider, softer band of merely-damp concrete around each pool.
+  gDamp = smoothstep( gLevel - 0.20, gLevel + 0.02, gDepth ) * uWetness;
+  gSurface = gBig.b * 0.6 + gSmall.b * 0.4;
 
   // Two crossing wave trains give directional chop; the rings add life.
   vec2 w = vGroundWorld.xz;
@@ -410,6 +542,7 @@ const GROUND_MASK = /* glsl */ `
     cos( w.y * 2.7 - t * 1.4 ) + sin( w.y * 1.1 + w.x * 1.9 - t * 0.9 )
   ) * 0.035;
   gRipple = ( wave + rainRipple( w, uRainAmount ) + impactRipple( w ) ) * uRippleStrength * gPuddle;
+  gChop = length( gRipple );
 `;
 
 const GROUND_NORMAL = /* glsl */ `
@@ -423,6 +556,12 @@ const GROUND_NORMAL = /* glsl */ `
 
 const GROUND_REFLECTION = /* glsl */ `
   {
+    if ( uDebugMode > 0.5 ) {
+      if ( uDebugMode < 1.5 ) outgoingLight = vec3( gPuddle );
+      else if ( uDebugMode < 2.5 ) outgoingLight = vec3( gDamp, gSurface, gChop * 8.0 );
+      else outgoingLight = texture2D( uReflection, gl_FragCoord.xy / uResolution ).rgb;
+      diffuseColor.a = 1.0;
+    } else {
     // Damp concrete outside the puddles: darker albedo, tighter specular.
     outgoingLight *= mix( 1.0, 0.72, gDamp * 0.8 );
 
@@ -433,17 +572,26 @@ const GROUND_REFLECTION = /* glsl */ `
       // reflection RT is a scaled copy of the same view, so normalised UVs
       // match regardless of its resolution.
       vec2 screenUv = gl_FragCoord.xy / uResolution;
-      // Distort by the ripple normal so the reflection breaks up on chop.
-      screenUv += gRipple * 0.55;
+      // Distortion scales with puddle depth: a shallow film barely bends the
+      // image, a deep pool breaks it up.
+      screenUv += gRipple * ( 0.35 + gPuddle * 0.75 );
       screenUv = clamp( screenUv, vec2( 0.002 ), vec2( 0.998 ) );
       vec3 reflectionColor = texture2D( uReflection, screenUv ).rgb;
 
-      // Schlick fresnel: reflections strengthen dramatically at grazing angles,
-      // which is what makes a wet apron read as wet from standing eye height.
+      // Schlick fresnel: reflections strengthen at grazing angles, which is
+      // what makes a wet apron read as wet from standing eye height.
+      //
+      // The floor matters as much as the curve. At 0.18 the puddles around the
+      // player's own feet - the ones they look at most - were almost dry,
+      // because a standing player views nearby ground at a steep angle. 0.38
+      // keeps near pools legible while distant ones still go near-mirror.
       vec3 viewDir = normalize( vViewPosition );
       float fresnel = pow( 1.0 - clamp( dot( viewDir, normal ), 0.0, 1.0 ), 4.0 );
-      float strength = uReflectionStrength * gPuddle * mix( 0.18, 1.0, fresnel );
-      outgoingLight = mix( outgoingLight, reflectionColor, clamp( strength, 0.0, 0.92 ) );
+      float strength = uReflectionStrength * gPuddle * mix( 0.38, 1.0, fresnel );
+      outgoingLight = mix( outgoingLight, reflectionColor, clamp( strength, 0.0, 0.94 ) );
+    }
     }
   }
 `;
+
+const tmpClearColor = new THREE.Color();

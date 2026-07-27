@@ -36,29 +36,51 @@ export const VISUAL_CONFIG = {
     adaptionRange: 0.22,
   },
 
-  /** Dusk-to-night sky. `timeOfDay` 0 = late dusk, 1 = deep night. */
+  /**
+   * Dusk-to-night sky. `timeOfDay` 0 = late dusk, 1 = deep night.
+   *
+   * The gradient has four stops. The warm `horizon` colour is applied only
+   * TOWARD THE SUN (see SkyShader) - a warm band that wraps the whole horizon
+   * ring is what made the previous sky read as a flat orange wash and, through
+   * the PMREM probe, tinted every reflective surface in the level.
+   */
   sky: {
     timeOfDay: 0.42,
-    zenithDay: 0x0f2740,
-    zenithNight: 0x0a1524,
-    horizonDay: 0xd06a34,
-    horizonNight: 0x35405e,
-    groundHaze: 0x151a24,
+    zenithDay: 0x0a1c33,
+    zenithNight: 0x060d1a,
+    /** Mid-height band; the main "colour of the sky" the player perceives. */
+    upperDay: 0x1d3f5e,
+    upperNight: 0x101f36,
+    horizonDay: 0xc26536,
+    horizonNight: 0x2c3c58,
+    groundHaze: 0x121824,
     /** Angular size / softness of the sun disc glow on the sky dome. */
     sunGlowPower: 620,
-    starIntensity: 0.75,
-    cloudCoverage: 0.6,
-    cloudSpeed: 0.0035,
+    starIntensity: 0.85,
+    cloudCoverage: 0.66,
+    cloudSpeed: 0.0042,
+    /**
+     * Strength of the horizon haze band, which is painted with the scene's own
+     * fog colour so the dome and the distant scenery dissolve into each other.
+     */
+    hazeStrength: 0.78,
+    /** Compass bearing of the departing storm, and how heavy it still is. */
+    stormAzimuth: 292,
+    stormStrength: 0.62,
   },
 
   sun: {
     /** Azimuth/elevation in degrees. Low sun = long, readable shadows. */
     azimuth: 108,
     elevation: 3.4,
-    colorDay: 0xffc08a,
-    colorNight: 0x6f8fc4,
-    intensityDay: 2.6,
-    intensityNight: 0.85,
+    // The key is already past sunset at timeOfDay 0.42, so it is only mildly
+    // warm; the strongly warm light in this scene comes from the sodium
+    // floodlights, not from the sky. A saturated orange key here re-tints
+    // every surface and destroys the warm/cool contrast.
+    colorDay: 0xffd0a8,
+    colorNight: 0x8fb0e0,
+    intensityDay: 2.2,
+    intensityNight: 1.05,
     shadowMapSize: 2048,
     shadowBias: -0.0008,
     shadowNormalBias: 0.035,
@@ -68,12 +90,18 @@ export const VISUAL_CONFIG = {
   },
 
   ambient: {
-    /** Hemisphere fill so shadowed areas keep readable information. */
-    skyColor: 0x4f74a3,
-    groundColor: 0x241d16,
-    intensity: 1.3,
+    /**
+     * Hemisphere fill so shadowed areas keep readable information.
+     * This is ALSO the shadow colour: whatever is not hit by the key or a
+     * practical is lit by this and nothing else. It must be clearly cool, or
+     * shadows go brown and the whole frame collapses into one hue.
+     */
+    skyColor: 0x5b88c4,
+    /** Bounce from the ground. Wet asphalt bounces cool, not warm brown. */
+    groundColor: 0x18222f,
+    intensity: 1.45,
     /** Strength of the PMREM environment probe on all PBR materials. */
-    envIntensity: 1.15,
+    envIntensity: 1.2,
   },
 
   fog: {
@@ -84,8 +112,8 @@ export const VISUAL_CONFIG = {
     mistHeight: 3.2,
     mistDensity: 0.55,
     /** Aerial perspective tint applied to distant geometry. */
-    aerialColor: 0x466288,
-    aerialStrength: 0.45,
+    aerialColor: 0x4a6f9e,
+    aerialStrength: 0.55,
   },
 
   /** Wet-ground / puddle system. */
@@ -109,15 +137,30 @@ export const VISUAL_CONFIG = {
   },
 
   grade: {
+    /**
+     * WHITE BALANCE, applied in scene-referred linear space BEFORE the
+     * tonemap - which is the only place it is physically meaningful.
+     *
+     * `whiteBalanceK` is the colour temperature the virtual camera is balanced
+     * FOR. Balancing for a warm source (a low value) tells the camera "the
+     * light here is orange", so it compensates by cooling the image; anything
+     * genuinely warm (the sodium lamps, the muzzle flash) then stands out as
+     * warm against a cool world. This is the standard night-exterior trick and
+     * it is the single most effective control over the warm/cool contrast.
+     *
+     * 6500 = neutral. Lower = cooler image. Tint shifts green(-) / magenta(+).
+     */
+    whiteBalanceK: 4600,
+    whiteBalanceTint: 0.04,
     /** Lift / gamma / gain style trim applied after tonemapping. */
     liftShadows: 0x0c1420,
     gainHighlights: 0xfffbf6,
     contrast: 1.09,
-    saturation: 1.12,
+    saturation: 1.16,
     /** Teal shadows / amber highlights split-tone, kept restrained. */
-    splitToneShadow: 0x1a4258,
-    splitToneHighlight: 0xffc48a,
-    splitToneBalance: 0.22,
+    splitToneShadow: 0x1d4f74,
+    splitToneHighlight: 0xffd0a0,
+    splitToneBalance: 0.3,
     vignette: 0.26,
     vignetteSoftness: 0.55,
     grain: 0.014,
@@ -150,19 +193,32 @@ export const VISUAL_CONFIG = {
     scale: 0.5,
   },
 
-  /** Practical lights placed in the level (floodlights, beacons, strips). */
+  /**
+   * Practical lights placed in the level.
+   *
+   * TWO COLOUR FAMILIES, deliberately. The yard and the container canyon are
+   * lit by old high-pressure SODIUM (deep amber); the warehouse facade, the
+   * pier head and the interior strips are modern MERCURY/LED (cold blue-white).
+   * The player physically crosses between the two, which is what produces
+   * warm/cool contrast in depth instead of one uniform colour cast. Making
+   * every practical the same temperature is what flattened the palette.
+   */
   practicals: {
-    floodColor: 0xffd9a8,
+    /** High-pressure sodium: yard masts, canyon masts, catwalk lamp. */
+    floodColorWarm: 0xffb257,
+    /** Mercury/LED: warehouse facade, pier head, blockhouse. */
+    floodColorCool: 0xbfd8ff,
+    floodColor: 0xffb257,
     floodIntensity: 620,
     floodDistance: 38,
     floodAngle: 0.52,
     floodPenumbra: 0.45,
     /** Volumetric cone mesh opacity - fakes light shafts cheaply. */
     shaftOpacity: 0.115,
-    beaconColor: 0xff5a2a,
+    beaconColor: 0xff4a20,
     beaconIntensity: 90,
     beaconSpeed: 1.9,
-    stripColor: 0x9fd8ff,
+    stripColor: 0xb8dcff,
     stripIntensity: 26,
     /** Chance per second that a failing lamp flickers. */
     flickerRate: 0.9,

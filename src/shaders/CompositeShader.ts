@@ -35,6 +35,8 @@ uniform sampler2D tAdapt;
 uniform vec2 uResolution;
 uniform float uTime;
 
+/** Luminance-preserving linear RGB gain from the white-balance control. */
+uniform vec3 uWhiteBalance;
 uniform float uExposure;
 /** How far auto-exposure may drift from the authored base exposure. */
 uniform float uAdaptRange;
@@ -143,6 +145,12 @@ void main() {
 
   // Damage feedback pulses before exposure so it feels like light, not paint.
   color += uDamageColor * uDamageFlash * ( 0.35 + dot( vUv - 0.5, vUv - 0.5 ) * 2.2 );
+
+  // White balance, in scene-referred linear space and BEFORE the tonemap -
+  // the only place it is physically meaningful. Balancing the camera for a
+  // warm illuminant cools the world and leaves genuinely warm sources (sodium
+  // lamps, muzzle flashes, fire) reading as warm against it.
+  color *= uWhiteBalance;
 
   // Auto-exposure: nudge the authored exposure toward an 18% grey key, but
   // never let it wander far - a shooter must not re-expose every time the

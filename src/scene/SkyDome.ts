@@ -33,6 +33,7 @@ export class SkyDome {
       fog: false,
       uniforms: {
         uZenith: { value: new THREE.Color() },
+        uUpper: { value: new THREE.Color() },
         uHorizon: { value: new THREE.Color() },
         uGround: { value: new THREE.Color() },
         uSunColor: { value: new THREE.Color() },
@@ -43,6 +44,10 @@ export class SkyDome {
         uCloudCoverage: { value: 0.62 },
         uCloudSpeed: { value: 0.0035 },
         uTime: { value: 0 },
+        uHazeColor: { value: new THREE.Color(0x223047) },
+        uHazeStrength: { value: 0.72 },
+        uStormDirection: { value: new THREE.Vector3(-0.75, 0, 0.66).normalize() },
+        uStormStrength: { value: 0.55 },
         uFlashColor: { value: new THREE.Color(0xffb066) },
         uFlashStrength: { value: 0 },
         uFlashDirection: { value: new THREE.Vector3(-1, 0.1, 0.4) },
@@ -55,7 +60,14 @@ export class SkyDome {
     // vertex shader pushes it to the far plane anyway.
     this.mesh.scale.setScalar(400);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1000;
+    // Draw the dome LAST in the opaque pass, not first.
+    //
+    // The sky is now the most expensive fragment shader in the scene (two
+    // cloud decks, ~13 octaves of noise). At renderOrder -1000 it shaded every
+    // pixel of the screen and was then overdrawn by the entire harbour. With
+    // depthWrite off and depthTest on, drawing it after the opaque geometry
+    // lets the depth buffer reject everything that is already covered.
+    this.mesh.renderOrder = 1000;
     this.mesh.matrixAutoUpdate = true;
 
     this.refresh();
@@ -70,6 +82,7 @@ export class SkyDome {
 
     const u = this.material.uniforms;
     (u.uZenith.value as THREE.Color).setHex(sky.zenithDay).lerp(new THREE.Color(sky.zenithNight), t);
+    (u.uUpper.value as THREE.Color).setHex(sky.upperDay).lerp(new THREE.Color(sky.upperNight), t);
     (u.uHorizon.value as THREE.Color).setHex(sky.horizonDay).lerp(new THREE.Color(sky.horizonNight), t);
     (u.uGround.value as THREE.Color).setHex(sky.groundHaze);
     this.sunColor.setHex(sun.colorDay).lerp(new THREE.Color(sun.colorNight), t);
@@ -79,6 +92,11 @@ export class SkyDome {
     u.uStarIntensity.value = sky.starIntensity;
     u.uCloudCoverage.value = sky.cloudCoverage;
     u.uCloudSpeed.value = sky.cloudSpeed;
+    u.uHazeStrength.value = sky.hazeStrength;
+    u.uStormStrength.value = sky.stormStrength;
+    (u.uStormDirection.value as THREE.Vector3)
+      .set(Math.sin(sky.stormAzimuth * DEG), 0, Math.cos(sky.stormAzimuth * DEG))
+      .normalize();
 
     // Elevation drops and azimuth swings slightly as the slice progresses.
     const elevation = sun.elevation * DEG;
@@ -89,6 +107,15 @@ export class SkyDome {
       Math.cos(elevation) * Math.cos(azimuth),
     );
     (u.uSunDirection.value as THREE.Vector3).copy(this.sunDirection);
+  }
+
+  /**
+   * The horizon haze band is painted with the SCENE's fog colour, so the dome
+   * and the distant scenery dissolve into one another. Lighting owns the fog
+   * colour, so it pushes it here whenever it changes.
+   */
+  setHazeColor(color: THREE.Color): void {
+    (this.material.uniforms.uHazeColor.value as THREE.Color).copy(color);
   }
 
   /** Distant artillery lighting the cloud base. */

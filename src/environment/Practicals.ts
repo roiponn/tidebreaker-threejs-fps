@@ -105,7 +105,7 @@ export class Practicals {
     options: { intensity?: number; color?: number; angle?: number; instability?: number; shafts?: boolean } = {},
   ): THREE.SpotLight {
     const p = this.visual.practicals;
-    const color = new THREE.Color(options.color ?? p.floodColor);
+    const color = new THREE.Color(options.color ?? p.floodColorWarm);
     const light = new THREE.SpotLight(
       color,
       options.intensity ?? p.floodIntensity,

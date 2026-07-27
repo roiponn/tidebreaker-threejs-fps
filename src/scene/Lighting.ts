@@ -21,6 +21,7 @@ import type { SkyDome } from './SkyDome';
 export class Lighting {
   readonly sun: THREE.DirectionalLight;
   readonly hemisphere: THREE.HemisphereLight;
+  readonly viewModelLight: THREE.DirectionalLight;
   private envScene: THREE.Scene;
   private pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
@@ -51,6 +52,23 @@ export class Lighting {
     this.hemisphere.name = 'AmbientFill';
     this.hemisphere.layers.enable(LAYER.VIEWMODEL);
     scene.add(this.hemisphere);
+
+    /**
+     * View-model key light. VIEWMODEL LAYER ONLY - it never touches the world.
+     *
+     * Physically the weapon is often in deep shadow (under the canopy, in a
+     * container alley) and correct PBR renders it as a black silhouette. Every
+     * first-person game cheats this the same way: a dedicated light rigged to
+     * the camera that exists solely to keep the hero asset's form readable.
+     * Because it is confined to the view-model layer it costs one light on a
+     * handful of pixels and cannot contaminate the scene's lighting.
+     */
+    this.viewModelLight = new THREE.DirectionalLight(0xbcd0e8, 1.5);
+    this.viewModelLight.name = 'ViewModelKey';
+    this.viewModelLight.castShadow = false;
+    this.viewModelLight.layers.set(LAYER.VIEWMODEL);
+    this.viewModelLight.target.layers.set(LAYER.VIEWMODEL);
+    scene.add(this.viewModelLight, this.viewModelLight.target);
 
     scene.fog = new THREE.FogExp2(visual.fog.color, visual.fog.density);
 
@@ -90,6 +108,10 @@ export class Lighting {
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.setHex(v.fog.color);
     fog.density = v.fog.density;
+    // The sky's horizon haze band is painted with the SAME colour, so the dome
+    // and the distant scenery dissolve into one another instead of meeting at
+    // a visible line. Fog colour is owned here, so it is pushed to the sky.
+    this.sky.setHazeColor(fog.color);
 
     sharedFogUniforms.uMistHeight.value = v.fog.mistHeight;
     sharedFogUniforms.uMistDensity.value = v.fog.mistDensity;
@@ -137,7 +159,18 @@ export class Lighting {
    * camera with a 46m box gives ~2cm, which is what makes the contact shadows
    * under crates read as contact rather than mush.
    */
-  update(cameraPosition: THREE.Vector3): void {
+  update(cameraPosition: THREE.Vector3, cameraQuaternion?: THREE.Quaternion): void {
+    // Rig the view-model light to the camera: up and to the left of the lens,
+    // which is the classic three-quarter key that reveals a weapon's top and
+    // side planes without flattening it.
+    if (cameraQuaternion) {
+      viewKeyOffset.set(-0.55, 0.7, 0.45).applyQuaternion(cameraQuaternion);
+      this.viewModelLight.position.copy(cameraPosition).add(viewKeyOffset);
+      this.viewModelLight.target.position.copy(cameraPosition);
+      this.viewModelLight.target.updateMatrixWorld();
+      this.viewModelLight.updateMatrixWorld();
+    }
+
     const dir = this.sky.sunDirection;
     // Snap the shadow centre to texel-sized steps to stop shadow edges
     // crawling as the player walks - the classic "shimmering shadow" bug.
@@ -156,5 +189,8 @@ export class Lighting {
     this.pmrem.dispose();
     this.sun.dispose();
     this.hemisphere.dispose();
+    this.viewModelLight.dispose();
   }
 }
+
+const viewKeyOffset = new THREE.Vector3();

@@ -19,7 +19,10 @@
       "Bash(git commit -q -m 'perf: cut draw calls 40% and forward-lighting cost; reload framing fix *)",
       "Bash(npm run *)",
       "Bash(git commit -q -m 'docs: README, visual design, quality report, performance, handover, known issues *)",
-      "Bash(git commit -q -m 'fix\\(vfx,materials\\): explosion over-brightness, decals on ribbed surfaces, container noise *)"
+      "Bash(git commit -q -m 'fix\\(vfx,materials\\): explosion over-brightness, decals on ribbed surfaces, container noise *)",
+      "Bash(sed -n '/^const GROUND_MASK/,/^`;/p' src/environment/WetGround.ts)",
+      "Bash(sed -n '/^const GROUND_REFLECTION/,/^`;/p' src/environment/WetGround.ts)",
+      "Bash(git commit -q -m 'feat\\(visual\\): fix the top three quality items - palette, puddles, sky *)"
     ]
   }
 }

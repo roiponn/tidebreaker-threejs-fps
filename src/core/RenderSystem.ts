@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LAYER } from './Layers';
 import { Disposer } from './Disposal';
-import { clamp01, damp } from './MathUtils';
+import { clamp01, damp, kelvinToLinearGain } from './MathUtils';
 import { FULLSCREEN_VERT, FullScreenQuad } from '@/shaders/FullScreenQuad';
 import { SSAO_BLUR_FRAG, SSAO_FRAG, SSAO_KERNEL_SIZE } from '@/shaders/SsaoShader';
 import {
@@ -188,6 +188,7 @@ export class RenderSystem {
         tAdapt: { value: null },
         uResolution: { value: new THREE.Vector2() },
         uTime: { value: 0 },
+        uWhiteBalance: { value: new THREE.Vector3(1, 1, 1) },
         uExposure: { value: 1 },
         uAdaptRange: { value: 0.22 },
         uBloomStrength: { value: 0.4 },
@@ -497,6 +498,11 @@ export class RenderSystem {
     c.uTime.value = elapsed;
     c.uNear.value = camera.near;
     c.uFar.value = camera.far;
+    kelvinToLinearGain(
+      this.visual.grade.whiteBalanceK,
+      this.visual.grade.whiteBalanceTint,
+      c.uWhiteBalance.value as THREE.Vector3,
+    );
     c.uExposure.value = this.visual.exposure.base;
     c.uAdaptRange.value = this.visual.exposure.adaptionRange;
     c.uBloomStrength.value = this.quality.bloom ? this.visual.bloom.strength : 0;
