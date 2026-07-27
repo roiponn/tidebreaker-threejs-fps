@@ -69,7 +69,8 @@ export class HarborLevel {
   private rng = new Rng(LEVEL_SEED);
   private windMeshes: THREE.Mesh[] = [];
   private disposables: Array<{ dispose(): void }> = [];
-  stats = { meshes: 0, triangles: 0 };
+  stats = { meshes: 0, triangles: 0, batches: [] as THREE.Mesh[] };
+  private batchCentres: THREE.Vector3[] = [];
 
   constructor(
     private readonly mats: MaterialLibrary,
@@ -101,6 +102,13 @@ export class HarborLevel {
     this.placeEnemies();
 
     this.stats = this.builder.build(collision);
+    // Cache each batch's world-space centre for the shadow-caster cull below.
+    for (const mesh of this.stats.batches) {
+      mesh.geometry.computeBoundingSphere();
+      this.batchCentres.push(
+        (mesh.geometry.boundingSphere?.center ?? new THREE.Vector3()).clone(),
+      );
+    }
   }
 
   // ------------------------------------------------------------------
@@ -882,7 +890,32 @@ export class HarborLevel {
     this.distant.setQuality(quality);
   }
 
+  /**
+   * SHADOW-CASTER CULL.
+   *
+   * The sun's shadow ortho box is only `sun.shadowRadius` metres across and
+   * follows the player, so a batch further away than that cannot contribute a
+   * single shadow texel - but three still submits it to the shadow pass and
+   * pays the cull test, the program bind and the draw. Toggling `castShadow`
+   * by distance removes that work entirely.
+   *
+   * The margin is generous (radius + 25m) because a batch's bounding sphere
+   * centre can be far from the part of it that is actually inside the box.
+   */
+  private cullShadowCasters(cameraPosition: THREE.Vector3): void {
+    const limit = this.visual.sun.shadowRadius + 25;
+    const limitSq = limit * limit;
+    for (let i = 0; i < this.stats.batches.length; i++) {
+      const mesh = this.stats.batches[i];
+      const radius = mesh.geometry.boundingSphere?.radius ?? 0;
+      const d = this.batchCentres[i].distanceToSquared(cameraPosition);
+      const shouldCast = d < limitSq + radius * radius;
+      if (mesh.castShadow !== shouldCast) mesh.castShadow = shouldCast;
+    }
+  }
+
   update(dt: number, elapsed: number, cameraPosition: THREE.Vector3): void {
+    this.cullShadowCasters(cameraPosition);
     this.practicals.update(dt, elapsed);
     this.wetGround.update(elapsed);
     this.distant.update(dt, elapsed, cameraPosition);

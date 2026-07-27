@@ -85,9 +85,10 @@ export class LevelBuilder {
    * Merges everything queued so far and attaches it to the level root.
    * Returns statistics used by the debug overlay.
    */
-  build(collision: CollisionWorld): { meshes: number; triangles: number } {
+  build(collision: CollisionWorld): { meshes: number; triangles: number; batches: THREE.Mesh[] } {
     let meshes = 0;
     let triangles = 0;
+    const batches: THREE.Mesh[] = [];
 
     for (const [key, bucket] of this.buckets) {
       if (bucket.entries.length === 0) continue;
@@ -103,6 +104,7 @@ export class LevelBuilder {
       mesh.updateMatrix();
       this.root.add(mesh);
       collision.addRaycastTarget(mesh);
+      batches.push(mesh);
       meshes++;
       triangles += (merged.index?.count ?? 0) / 3;
     }
@@ -113,6 +115,6 @@ export class LevelBuilder {
 
     this.buckets.clear();
     this.pendingCollision.length = 0;
-    return { meshes, triangles };
+    return { meshes, triangles, batches };
   }
 }

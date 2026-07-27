@@ -114,6 +114,14 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
         [keep(chamferBox(0.075, 0.12, 0.055, 0.012, 1)), trs(0.085, 0.05, 0.135)],
         // Radio on the left shoulder strap.
         [keep(chamferBox(0.06, 0.11, 0.045, 0.01, 1)), trs(-0.13, 0.25, 0.06)],
+        // Pauldrons: squashed domes draping over the deltoid. They belong to
+        // the TORSO so they stay put while the arm swings beneath them, which
+        // is what hides a rigid shoulder - and they are merged in here rather
+        // than being their own mesh, since they share this material and parent.
+        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(-0.185, 0.248, 0)],
+        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(0.185, 0.248, 0)],
+        // Collar ring: closes the neck at every head angle.
+        [keep(new THREE.CylinderGeometry(0.072, 0.085, 0.075, 10)), trs(0, 0.30, 0)],
       ],
       gear,
       'carrier',
@@ -127,19 +135,7 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   // pieces belong to the TORSO, so they stay put while the arm rotates beneath
   // them - exactly how a real pauldron and collar behave, and the standard way
   // to hide a rigid shoulder.
-  torso.add(
-    meshFrom(
-      [
-        // Pauldrons: squashed domes draping over the deltoid.
-        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(-0.185, 0.248, 0)],
-        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(0.185, 0.248, 0)],
-        // Collar ring: closes the neck at every head angle.
-        [keep(new THREE.CylinderGeometry(0.072, 0.085, 0.075, 10)), trs(0, 0.30, 0)],
-      ],
-      gear,
-      'pauldrons',
-    ),
-  );
+
   // Neck column. The head pivots at its top, and the sphere at that pivot means
   // head rotation cannot open a seam.
   torso.add(
@@ -158,6 +154,7 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   antenna.position.set(-0.14, 0.48, 0.02);
   antenna.rotation.z = 0.16;
   antenna.castShadow = false;
+  antenna.receiveShadow = false;
   torso.add(antenna);
 
   // --- head: helmet with a rail, NVG mount and goggles ---

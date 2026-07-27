@@ -48,6 +48,8 @@ interface Enemy {
   walkPhase: number;
   strobePhase: number;
   visible: boolean;
+  /** Animation-LOD counter; see updateAlive(). */
+  animateSkip: number;
 }
 
 export interface EnemyHit {
@@ -122,6 +124,7 @@ export class EnemyManager {
         walkPhase: this.rng.range(0, 6.28),
         strobePhase: this.rng.range(0, 6.28),
         visible: true,
+        animateSkip: 0,
       });
     }
   }
@@ -366,8 +369,21 @@ export class EnemyManager {
       }
     }
 
-    // --- animation ---
-    this.animate(enemy, dt, elapsed);
+    // --- animation LOD ---
+    //
+    // The pose solve is pure CPU and its result is sub-pixel beyond ~35m. Far
+    // hostiles animate on every third frame; the ones the player is actually
+    // fighting animate every frame. Nothing is hidden, so there is no pop -
+    // only the update RATE changes, and at that distance a 20Hz limb pose is
+    // indistinguishable from a 60Hz one.
+    const distanceSq = enemy.position.distanceToSquared(playerEye);
+    enemy.animateSkip = distanceSq > 35 * 35 ? (enemy.animateSkip + 1) % 3 : 0;
+    if (enemy.animateSkip === 0) this.animate(enemy, dt * (distanceSq > 35 * 35 ? 3 : 1), elapsed);
+
+    // Beyond the fog's useful range a soldier is a couple of dark pixels; stop
+    // submitting them entirely.
+    const visible = distanceSq < 110 * 110;
+    if (enemy.rig.root.visible !== visible) enemy.rig.root.visible = visible;
   }
 
   private updateFiring(enemy: Enemy, dt: number, playerEye: THREE.Vector3, distance: number): void {

@@ -89,6 +89,10 @@ export class Game {
   private rafHandle = 0;
   private started = false;
   private particleScale = 1;
+  /** >0 while a ?boom= test detonation is pending; repeats on an interval. */
+  private boomTimer = 0;
+  private boomInterval = 0;
+  private boomCount = 0;
 
   private readonly tmpVec = new THREE.Vector3();
   private readonly tmpVec2 = new THREE.Vector3();
@@ -212,6 +216,14 @@ export class Game {
       // "inspect this asset lit rather than as a silhouette" repeatable.
       const exposure = Number(params.get('exposure'));
       if (Number.isFinite(exposure) && exposure > 0) this.visual.exposure.base = exposure;
+      // ?boom=N detonates a charge N seconds into play, 7m ahead of the
+      // player. Verifying blast brightness by trying to shoot a fuel drum with
+      // synthetic input is not repeatable; this is.
+      if (params.has('boom')) {
+        const delay = Number(params.get('boom'));
+        this.boomInterval = Number.isFinite(delay) && delay > 0 ? delay : 4;
+        this.boomTimer = this.boomInterval;
+      }
       this.handleResize();
 
       // Render one frame before hiding the loader so the first thing the
@@ -551,6 +563,26 @@ export class Game {
     this.director.update(dt, this.player.position.x, this.enemies.aliveCount, extractionDistance, this.player.alive);
     if (previousPhase === 'active' && this.director.phase !== 'active') {
       this.onMissionEnded(this.director.phase === 'complete');
+    }
+
+    // Deliberately phase-independent: it must work on the attract/briefing
+    // view too, where nothing else is perturbing the scene.
+    if (this.boomTimer > 0) {
+      this.boomTimer -= dt;
+      if (this.boomTimer <= 0) {
+        this.boomTimer = this.boomInterval;
+        this.view.getAimDirection(this.tmpVec2);
+        this.tmpVec2.y = 0;
+        this.tmpVec2.normalize().multiplyScalar(7).add(this.player.position);
+        this.tmpVec2.y += 0.6;
+        this.bus.emit('explosion', {
+          position: this.tmpVec2.clone(),
+          radius: this.visual.explosion.radius,
+          power: 1,
+        });
+        this.boomCount++;
+        document.body.dataset.booms = String(this.boomCount);
+      }
     }
 
     this.updateHud(dt, extractionDistance);
