@@ -117,15 +117,15 @@ export function buildRifle(mats: MaterialLibrary): RifleParts {
   // ==================================================================
   // Barrel, gas system and muzzle device
   // ==================================================================
-  const barrelGeo = keep(new THREE.CylinderGeometry(0.0115, 0.0125, 0.30, 14));
-  const barrel = new THREE.Mesh(barrelGeo, mats.gunMetal());
-  // A dedicated material instance so heat can glow without affecting the rest.
-  const barrelMaterial = (mats.gunMetal().clone() as THREE.MeshStandardMaterial);
+  // A dedicated material instance so heat can glow without affecting the rest
+  // of the receiver, which shares the pooled gunMetal material.
+  const barrelMaterial = mats.gunMetal().clone() as THREE.MeshStandardMaterial;
   barrelMaterial.name = 'rifleBarrel';
   barrelMaterial.emissive = new THREE.Color(0xff2e00);
   barrelMaterial.emissiveIntensity = 0;
   barrelMaterial.userData = { surface: 'metal' };
-  barrel.material = barrelMaterial;
+  const barrelGeo = keep(new THREE.CylinderGeometry(0.0115, 0.0125, 0.30, 14));
+  const barrel = new THREE.Mesh(barrelGeo, barrelMaterial);
   barrel.position.set(0, 0.012, -0.29);
   barrel.rotation.x = Math.PI / 2;
   barrel.castShadow = false;

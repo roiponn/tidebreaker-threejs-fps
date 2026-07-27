@@ -23,10 +23,10 @@ export class Player {
 
   stance: Stance = 'stand';
   grounded = false;
-  health = PLAYER_CONFIG.health;
+  health: number = PLAYER_CONFIG.health;
   alive = true;
 
-  private eyeHeight = PLAYER_CONFIG.eyeHeightStand;
+  private eyeHeight: number = PLAYER_CONFIG.eyeHeightStand;
   private coyoteTimer = 0;
   private timeSinceDamage = 999;
   private footstepDistance = 0;
@@ -116,7 +116,7 @@ export class Player {
       !ads &&
       this.grounded;
 
-    let targetSpeed = PLAYER_CONFIG.speedWalk;
+    let targetSpeed: number = PLAYER_CONFIG.speedWalk;
     if (this.stance === 'crouch') targetSpeed = PLAYER_CONFIG.speedCrouch;
     else if (this.sprinting) targetSpeed = PLAYER_CONFIG.speedSprint;
     else if (ads) targetSpeed = PLAYER_CONFIG.speedAds;

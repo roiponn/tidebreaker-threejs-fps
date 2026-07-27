@@ -40,14 +40,14 @@ export class WeaponController {
   readonly parts: RifleParts;
 
   state: WeaponState = 'ready';
-  magAmmo = WEAPON_CONFIG.magSize;
-  reserveAmmo = WEAPON_CONFIG.reserveAmmo;
+  magAmmo: number = WEAPON_CONFIG.magSize;
+  reserveAmmo: number = WEAPON_CONFIG.reserveAmmo;
   /** 0 = hip, 1 = fully aimed. Read by the HUD and the post stack. */
   adsBlend = 0;
   /** Barrel heat 0..1, drives the emissive glow and the heat-haze VFX. */
   heat = 0;
   /** Current bullet spread in radians, including movement and fire bloom. */
-  spread = WEAPON_CONFIG.spreadHip;
+  spread: number = WEAPON_CONFIG.spreadHip;
 
   private fireTimer = 0;
   private reloadTimer = 0;
