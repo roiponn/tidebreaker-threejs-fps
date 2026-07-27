@@ -26,7 +26,9 @@ Without the snap, shadow edges crawl visibly as the player walks; this is the si
 
 ### 2.2 Fill that keeps the game readable
 
-`HemisphereLight`, sky colour `#4f74a3`, intensity `1.3`. This is deliberately generous.
+`HemisphereLight`, sky colour `#5b88c4`, intensity `1.45`. This is deliberately generous, and
+deliberately COOL: it is also the shadow colour, so a warm fill here collapses the whole frame
+into one hue.
 
 The brief's instruction not to fake quality with darkness is also a gameplay requirement: an
 enemy in the shadow of a container has to be findable. Three mechanisms guarantee that:
@@ -68,7 +70,7 @@ emissive-only fixtures: they read as sources through bloom without costing a per
 Volume is faked with an additive cone mesh (`src/shaders/LightConeShader.ts`) that brightens
 edge-on, fades along its length, and fades near the camera so you can walk through a beam.
 
-### 2.4 Atmosphere
+### 2.6 Atmosphere
 
 `src/materials/FogPatch.ts` overrides three's fog ShaderChunks **globally**, so every lit material
 gets the same atmosphere for free:
@@ -108,7 +110,7 @@ Roughness and metalness are what separate materials, not colour:
 | Surface | Roughness | Metalness | Notes |
 | --- | --- | --- | --- |
 | Concrete | 0.42–0.94 | 0 | Aggregate, cracks, water staining |
-| Wet apron | 0.32 floor → 0.035 in puddles | 0 | Puddle mask drives it |
+| Wet apron | 0.32 floor → 0.012–0.34 in puddles | 0 | Puddle mask + chop + distance |
 | Container paint | 0.52–0.94 | 0–0.85 | Metal shows only where paint has gone |
 | Bare steel | 0.4–1.0 | 0.9 → 0.3 with rust | |
 | Tread plate | 0.42–1.0 | 0.35–0.85 | Studs polish, valleys stay dirty |
@@ -134,10 +136,17 @@ single function is responsible for most of the perceived material quality.
 `MeshStandardMaterial` through `onBeforeCompile` (rather than replacing it, which would mean
 re-implementing shadows and IBL) and adds:
 
-- a procedural puddle mask (thresholded fbm — puddles have waterlines, not gradients);
-- roughness driven to 0.035 and the concrete normal replaced by a water normal inside puddles;
+- a procedural puddle mask storing a **smooth depth field**, thresholded per-pixel in the shader.
+  The field is histogram-normalised so the authored coverage percentile sits exactly on 0.5 —
+  the value mipmaps converge to — which is what keeps puddle coverage identical at the player's
+  feet and at the far end of the berth. Storing a pre-thresholded mask instead (the obvious
+  implementation) makes mipmaps average it into "half a puddle everywhere" at distance;
+- water roughness that varies with a fine surface field, local chop and view distance, so pools
+  have calm mirror centres and duller, wind-ruffled edges rather than being one flat mirror;
 - **planar reflection**: the scene re-rendered from the camera mirrored through `y = 0`, sampled
-  in screen space (exact for a flat mirror) and distorted by the ripple normal;
+  in screen space (exact for a flat mirror) and distorted by the ripple normal. Geometry below the
+  water line is removed with a global clip plane — without it the 900m sea plane folds up into the
+  reflection and fills it with flat water colour;
 - Schlick fresnel, so reflections strengthen at grazing angles — which is what makes a wet apron
   read as wet from standing eye height;
 - rain rings spawned from a hashed grid inside the shader (zero CPU cost);
@@ -213,13 +222,17 @@ All in [`src/config/visual.ts`](../src/config/visual.ts). The ones that change t
 | `exposure.base` | `1.62` | Primary brightness control |
 | `sun.azimuth / elevation` | `108° / 3.4°` | Back-lighting direction. Changing this re-lights the whole level |
 | `sun.intensityDay/Night` | `2.6 / 0.85` | Key light |
-| `ambient.intensity` | `1.3` | **Shadow readability. Do not reduce below ~1.0** |
-| `ambient.envIntensity` | `1.15` | PMREM probe contribution |
+| `ambient.intensity` | `1.45` | **Shadow readability. Do not reduce below ~1.0** |
+| `ambient.envIntensity` | `1.2` | PMREM probe contribution |
 | `fog.density` | `0.0138` | Distance haze |
 | `fog.mistHeight / mistDensity` | `3.2 / 0.55` | Ground mist |
-| `fog.aerialStrength` | `0.45` | Depth separation of distant geometry |
+| `fog.aerialStrength` | `0.55` | Depth separation of distant geometry |
 | `wetness.global` | `0.82` | Roughness reduction + puddle coverage |
 | `wetness.puddleReflectivity` | `0.92` | Planar reflection strength |
+| `practicals.floodColorWarm/Cool` | `#ffb257` / `#bfd8ff` | The two light families. Changing these to one colour destroys the palette |
+| `grade.whiteBalanceK` | `4600` | Camera balanced for a warm illuminant, so the world reads cool and lamps read warm |
+| `sky.hazeStrength` | `0.78` | Horizon band that joins dome to scenery |
+| `sky.stormAzimuth/Strength` | `292°` / `0.62` | Departing rain mass |
 | `practicals.floodIntensity` | `620` | With decay = 2 this is candela-ish; ~1/d² |
 | `bloom.threshold / strength` | `0.92 / 0.42` | Only genuine emitters should bloom |
 | `grade.splitToneBalance` | `0.22` | Teal shadows / amber highlights |
@@ -238,3 +251,8 @@ All in [`src/config/visual.ts`](../src/config/visual.ts). The ones that change t
    luminance-normalised one tints *and* darkens, turning dusk into a red smear.
 6. **`chamferBox` instead of `BoxGeometry`** for anything hard-surface.
 7. **Practical fixtures** — if you add a light, model its housing too.
+8. **The puddle field must stay histogram-normalised around 0.5.** Store a smooth field, never a
+   thresholded mask, or coverage changes with distance and draws a line across the deck.
+9. **The two practical colour families.** Collapsing them to one temperature undoes the palette.
+10. **The sky's renderOrder (1000, i.e. last in the opaque pass).** At -1000 it shades every pixel
+    and is then overdrawn, which is a large and invisible frame-time cost.
