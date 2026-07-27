@@ -10,14 +10,19 @@ Being explicit, because the brief forbids claiming unverified work:
 
 | Claim | Status |
 | --- | --- |
-| Project builds with no TypeScript errors | **Verified** — `tsc --noEmit` clean |
+| Project builds with no TypeScript errors | **Verified** — `tsc --noEmit` and `vite build` clean |
 | Boots and reaches the playable state | **Verified** — mission phase reaches `active` |
 | Firing, ammo drain, auto-reload, reload animation | **Verified** on screen |
 | HUD updates (ammo, objective, hostile count, extraction range) | **Verified** on screen |
 | Draw-call / triangle / light counts | **Verified** with the in-game overlay |
+| Enemies activate, close on the player and return fire | **Verified** — a hostile advanced on the player and the condition bar dropped |
+| Impact particles and bullet-hole decals spawn | **Verified** via the live counters (76 particles, 38 decals) |
+| Shell casings eject and land | **Verified** — a casing is visible on the deck in a captured frame |
+| Explosions fire (drum shot, blast light, screen response) | **Verified** — an explosion frame was captured (and revealed a defect, see #15) |
+| Chain reactions between drums | **NOT verified** — implemented, not isolated in a capture |
+| Player death and mission completion | **NOT verified** — the loop is implemented; a full kill-to-extraction run was not played |
+| No console errors or warnings | **Verified** — a fresh tab logs only Vite's connection messages |
 | 60 fps at 1080p on a discrete GPU | **NOT verified** — see §4 |
-| Enemy AI firing back, player damage, death, mission complete | **NOT directly verified** — the loop is implemented and enemies activate, but I did not play far enough down the berth to confirm a full kill-to-extraction run |
-| Explosions, chain reactions, decals, casings on screen | **NOT directly verified** — implemented and wired, but not visually confirmed in a captured frame |
 | Blind comparison against reference footage | **Not performed.** No reference material was provided |
 
 ---
@@ -31,7 +36,7 @@ These were all real, all found by looking at rendered frames:
 | 1 | Whole image a red smear | Split-toning multiplied by a raw colour, tinting *and* darkening | Normalise the tone to unit luminance first (`CompositeShader.ts`) |
 | 2 | Opening shot crouched, staring at the deck; weapon retracted | Intro camera offset applied during the briefing phase and accumulated into the aim | Phase-gate it; make it a pure additive offset (`MissionDirector`, `PlayerCamera`) |
 | 3 | Player spawned facing a wall | `playerSpawnYaw` sign error | `-PI/2` (`HarborLevel.ts`) |
-| 4 | Yard essentially unlit; only ambient visible | Practical intensities (46) were pre-decay values; with `decay = 2` they vanish | Re-derived for 1/d²: floods 620, muzzle 900, explosion 5200 |
+| 4 | Yard essentially unlit; only ambient visible | Practical intensities (46) were pre-decay values; with `decay = 2` they vanish | Re-derived for 1/d²: floods 620 (muzzle and explosion were then over-corrected, see #15) |
 | 5 | Every panel texture ~10× too large | `PlaneGeometry` used 0–1 UVs while `chamferBox` used metres | Unified metre UVs project-wide; retiled every material |
 | 6 | Weapon read as chrome static | High-frequency normal on an 88 % metallic surface | Flattened the normal, floored roughness at 0.28 |
 | 7 | Weapon read as a slab across the frame | View-model origin too far forward, stock inside the frustum | Origin moved to the shoulder |
@@ -42,6 +47,9 @@ These were all real, all found by looking at rendered frames:
 | 12 | Shader compile failures (sea, wet ground, bloom) | `.z` on a `vec2`; `luminance()` colliding with three's prefix | Fixed |
 | 13 | Game unplayable where pointer lock is refused | No fallback | Soft-lock fallback reading raw mouse deltas |
 | 14 | 931 draw calls, 26 lights | Per-part enemy meshes, spot shadows, a light per fixture | 556 draw calls, 17 lights (see [PERFORMANCE.md](PERFORMANCE.md)) |
+| 15 | An explosion clipped the **entire frame** to white | Blast light at 5200 cd with decay = 2 delivers ~200 units at 5 m, far past the ACES shoulder, plus a fireball at brightness 11 | Light 5200 → 1500, range 62 → 46 m, fireball brightness 11 → 5.5, muzzle 900 → 480 |
+| 16 | Bullet holes invisible on container walls | Flat decal quads offset 1.2 cm sink between the ±2.6 cm corrugation ribs | Ribbed surfaces get a 3.8 cm offset |
+| 17 | Container paint read as per-texel noise at close range, swamping decals | Un-blurred height field + normal strength 2.0 on a partly metallic surface | Blurred the field, normal 2.0 → 1.05, calmer rust and lower metalness |
 
 ---
 
@@ -108,13 +116,17 @@ costs one light and does not touch the world.
 **Files.** `src/scene/Lighting.ts`, `src/core/Layers.ts`.
 **Verify.** Compare the rifle under the canopy and in a floodlit pool; both should show form.
 
-### P6 — Impact and explosion VFX not visually confirmed
+### P6 — Explosion readability, after the over-brightness fix
 
-**Problem.** Decals, sparks, casings and explosions are implemented and event-wired but I did not
-capture a frame proving they look right.
-**Priority.** Medium-high — these are explicitly required by the brief.
-**Fix.** Fire at a container at 5 m and inspect; detonate a drum cluster and inspect.
-**Files.** `src/effects/*`.
+**Problem.** The blast light was reduced from 5200 to 1500 cd after a captured frame showed it
+clipping the whole screen to white, but the corrected value has **not** been re-verified in a
+capture. It may now be under-powered.
+**Cause.** Tuned analytically (1/d² against the ACES shoulder), not visually.
+**Priority.** Medium-high.
+**Fix.** Detonate the canyon drum pair and the four-drum fuel dump and check both: the blast should
+dominate the frame without erasing it, and the chain reaction should stagger visibly.
+**Files.** `src/config/visual.ts` (`explosion.*`), `src/effects/VfxManager.ts` (`SPEC.fireball`).
+**Verify.** The frame stays readable; the silhouette of nearby cover survives the flash.
 
 ### P7 — No LOD and no occlusion culling
 

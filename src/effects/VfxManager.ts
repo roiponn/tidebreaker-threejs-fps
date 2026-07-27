@@ -716,7 +716,9 @@ const SPEC: Record<string, ParticleSpec> = {
     alphaCurve: (t) => Math.pow(1 - t, 1.5),
     colorStart: new THREE.Color(0xffe9b0),
     colorEnd: new THREE.Color(0xff3c08),
-    brightness: 11,
+    // 11 was enough to clip the frame to white on its own once the blast light
+    // was added on top. The fireball should read as hot, not as a lens flare.
+    brightness: 5.5,
     brightnessCurve: (t) => Math.pow(1 - t, 1.8),
     drag: 0.1,
     gravity: -3.5,
@@ -762,7 +764,7 @@ const SPEC: Record<string, ParticleSpec> = {
     alphaCurve: (t) => Math.pow(1 - t, 1.2),
     colorStart: new THREE.Color(0xffe0a0),
     colorEnd: new THREE.Color(0xd02a00),
-    brightness: 7,
+    brightness: 4.5,
     brightnessCurve: (t) => Math.pow(1 - t, 2),
     gravity: 13,
     drag: 0.72,

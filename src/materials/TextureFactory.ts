@@ -271,9 +271,12 @@ export class TextureFactory {
       const height = new Float32Array(res * res);
       for (let i = 0; i < height.length; i++) {
         // Rust is physically raised (scale/flaking), paint chips are recessed.
-        height[i] = rust[i] * 0.42 + grain[i] * 0.08 - Math.max(0, chip[i] - 0.82) * 0.5;
+        height[i] = rust[i] * 0.30 + grain[i] * 0.03 - Math.max(0, chip[i] - 0.82) * 0.35;
       }
-      scratchField(height, res, 140, seed + 7, { length: 0.18, strength: 0.09 });
+      scratchField(height, res, 60, seed + 7, { length: 0.18, strength: 0.05 });
+      // Blur before normalising: at close range the un-blurred field produced
+      // per-texel specular noise that swamped bullet-hole decals sitting on it.
+      blurField(height, res, 1, 1);
       normalizeField(height);
 
       const paint = hexToRgb(baseHex);
@@ -286,21 +289,21 @@ export class TextureFactory {
         {
           res,
           height,
-          normalStrength: 2.0,
+          normalStrength: 1.05,
           aoRadius: 3,
-          aoStrength: 2.4,
+          aoStrength: 1.7,
           color: (i, _u, v) => {
             // Sun-bleaching: the top of every panel is lighter than the bottom.
             let c = mixRgb(paintFaded, paint, Math.min(1, v * 0.85 + 0.25));
             c = mixRgb(c, primer, Math.max(0, chip[i] - 0.74) * 2.2);
             const r = rust[i];
-            c = mixRgb(c, mixRgb(rustDark, rustLight, rustBlotch[i]), Math.min(1, r * 1.15));
+            c = mixRgb(c, mixRgb(rustDark, rustLight, rustBlotch[i]), Math.min(0.85, r * 0.85));
             c = mixRgb(c, [40, 38, 34], Math.max(0, dirt[i] - 0.55) * 0.7);
             return c;
           },
-          roughness: (i) => Math.min(1, 0.52 + rust[i] * 0.42 + dirt[i] * 0.12),
+          roughness: (i) => Math.min(1, 0.62 + rust[i] * 0.3 + dirt[i] * 0.08),
           // Bare metal shows through only where the paint has actually gone.
-          metalness: (i) => Math.min(0.85, Math.max(0, chip[i] - 0.8) * 3 + rust[i] * 0.25),
+          metalness: (i) => Math.min(0.6, Math.max(0, chip[i] - 0.84) * 2.4 + rust[i] * 0.15),
         },
         this.anisotropy,
       );

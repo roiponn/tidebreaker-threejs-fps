@@ -7,11 +7,15 @@ import type { TextureFactory } from '@/materials/TextureFactory';
 /**
  * Bullet holes and scorch marks.
  *
- * Implemented as small camera-facing-agnostic quads pushed 1cm off the surface
- * along its normal, with polygonOffset on top. Real projected decals (clipping
- * a box against the receiving geometry) would be correct on curved surfaces,
- * but every surface a bullet can hit here is planar at the scale of a 12cm
- * decal, so the quad is visually identical for a fraction of the cost.
+ * Implemented as quads pushed off the surface along its normal, with
+ * polygonOffset on top. Real projected decals (clipping a box against the
+ * receiving geometry) would be correct on arbitrary surfaces, but almost
+ * everything a bullet can hit here is planar at the scale of a 13cm decal.
+ *
+ * The exception is corrugated cladding, whose ribs are +-2.6cm of real
+ * geometry: a quad offset by the usual 1.2cm disappears between them. Those
+ * surfaces get a 3.8cm offset instead, which is the pragmatic fix. A projected
+ * decal system is the correct one - see docs/KNOWN_ISSUES.md V6.
  *
  * The pool is hard-capped by the quality preset: the oldest decal fades out and
  * is recycled, which is what keeps a 30-round magazine from producing 30
@@ -111,7 +115,11 @@ export class DecalSystem {
     const { item, index } = this.pool.acquire();
     void index;
     item.mesh.material = this.materialFor(this.kindForSurface(surface));
-    this.orient(item.mesh, point, normal);
+    // Container walls and cladding are GEOMETRICALLY corrugated (+-2.6cm ribs).
+    // A flat quad offset by the usual 1.2cm sinks between the ribs and is
+    // invisible, so ribbed surfaces get a much larger offset.
+    const ribbed = surface === 'thinMetal' || surface === 'fence';
+    this.orient(item.mesh, point, normal, ribbed ? 0.038 : 0.012);
     const size = (surface === 'thinMetal' ? 0.16 : 0.13) * scale * (0.8 + Math.random() * 0.5);
     item.baseScale = size;
     item.mesh.scale.setScalar(size);
@@ -127,7 +135,7 @@ export class DecalSystem {
   addScorch(point: THREE.Vector3, normal: THREE.Vector3, radius: number): void {
     const { item } = this.pool.acquire();
     item.mesh.material = this.materialFor('scorch');
-    this.orient(item.mesh, point, normal);
+    this.orient(item.mesh, point, normal, 0.02);
     item.baseScale = radius;
     item.mesh.scale.setScalar(radius);
     item.mesh.rotateZ(Math.random() * Math.PI * 2);
@@ -136,9 +144,9 @@ export class DecalSystem {
     item.mesh.visible = true;
   }
 
-  private orient(mesh: THREE.Mesh, point: THREE.Vector3, normal: THREE.Vector3): void {
+  private orient(mesh: THREE.Mesh, point: THREE.Vector3, normal: THREE.Vector3, offset = 0.012): void {
     // Offset along the normal so the quad sits proud of the surface.
-    mesh.position.copy(point).addScaledVector(normal, 0.012);
+    mesh.position.copy(point).addScaledVector(normal, offset);
     this.tmpUp.set(0, 0, 1);
     this.tmpQuat.setFromUnitVectors(this.tmpUp, normal);
     mesh.quaternion.copy(this.tmpQuat);

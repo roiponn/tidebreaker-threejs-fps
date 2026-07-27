@@ -169,7 +169,7 @@ export const VISUAL_CONFIG = {
   },
 
   muzzle: {
-    lightIntensity: 900,
+    lightIntensity: 480,
     lightDistance: 26,
     /** Flash lifetime in seconds - 2 frames at 60fps reads as "snappy". */
     lightDuration: 0.045,
@@ -177,8 +177,8 @@ export const VISUAL_CONFIG = {
   },
 
   explosion: {
-    lightIntensity: 5200,
-    lightDistance: 62,
+    lightIntensity: 1500,
+    lightDistance: 46,
     lightDuration: 0.55,
     radius: 7.5,
     damage: 90,
