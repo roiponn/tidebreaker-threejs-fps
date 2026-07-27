@@ -4,7 +4,8 @@
       "Bash(npm -v)",
       "Bash(git --version)",
       "Bash(npm install *)",
-      "Bash(npm ls *)"
+      "Bash(npm ls *)",
+      "Bash(python3 -)"
     ]
   }
 }

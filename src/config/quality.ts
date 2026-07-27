@@ -20,13 +20,16 @@ export interface QualitySettings {
   /** Number of practical lights allowed to cast shadows. */
   shadowCastingPracticals: number;
   ssao: boolean;
+  /** SSAO render scale relative to the main framebuffer. */
+  ssaoScale: number;
   bloom: boolean;
   /** Planar reflection for the wet ground. The single most expensive feature. */
   planarReflection: boolean;
   reflectionScale: number;
   dof: boolean;
   motionBlur: boolean;
-  smaa: boolean;
+  /** Post antialiasing (FXAA). */
+  antialias: boolean;
   /** Volumetric light cone meshes. */
   lightShafts: boolean;
   /** Max simultaneous particles across every VFX pool. */
@@ -49,12 +52,13 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     shadowMapSize: 1024,
     shadowCastingPracticals: 0,
     ssao: false,
+    ssaoScale: 0.5,
     bloom: true,
     planarReflection: false,
     reflectionScale: 0.35,
     dof: false,
     motionBlur: false,
-    smaa: false,
+    antialias: false,
     lightShafts: false,
     particleBudget: 900,
     decalBudget: 40,
@@ -70,12 +74,13 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     shadowMapSize: 2048,
     shadowCastingPracticals: 1,
     ssao: true,
+    ssaoScale: 0.5,
     bloom: true,
     planarReflection: true,
     reflectionScale: 0.4,
     dof: true,
     motionBlur: true,
-    smaa: true,
+    antialias: true,
     lightShafts: true,
     particleBudget: 1800,
     decalBudget: 80,
@@ -91,12 +96,13 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     shadowMapSize: 2048,
     shadowCastingPracticals: 2,
     ssao: true,
+    ssaoScale: 0.6,
     bloom: true,
     planarReflection: true,
     reflectionScale: 0.5,
     dof: true,
     motionBlur: true,
-    smaa: true,
+    antialias: true,
     lightShafts: true,
     particleBudget: 3200,
     decalBudget: 140,
