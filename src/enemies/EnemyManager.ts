@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ENEMY_CONFIG } from '@/config/gameplay';
 import type { EventBus } from '@/core/EventBus';
-import { clamp01, damp, lerp } from '@/core/MathUtils';
+import { clamp, clamp01, damp, lerp } from '@/core/MathUtils';
 import { Rng } from '@/core/Rng';
 import type { MaterialLibrary } from '@/materials/MaterialLibrary';
 import type { CollisionWorld } from '@/physics/CollisionWorld';
@@ -50,6 +50,32 @@ interface Enemy {
   visible: boolean;
   /** Animation-LOD counter; see updateAlive(). */
   animateSkip: number;
+
+  // --- secondary motion state (see animate()) ---
+  /** Decoupled yaw chain: hips lag, torso twists, head leads. */
+  hipYaw: number;
+  torsoYaw: number;
+  headYaw: number;
+  /** Measured ground speed, used to drive stride length and lean. */
+  groundSpeed: number;
+  prevGroundSpeed: number;
+  prevPosition: THREE.Vector3;
+  /** Acceleration lean spring. */
+  leanPitch: number;
+  leanPitchVel: number;
+  leanRoll: number;
+  leanRollVel: number;
+  /** Recoil absorbed through the upper body. */
+  recoil: number;
+  recoilVel: number;
+  /** Two-stage hit reaction: sharp local response, slower body follow-through. */
+  hitPitch: number;
+  hitPitchVel: number;
+  hitRoll: number;
+  hitRollVel: number;
+  bodyPitch: number;
+  bodyRoll: number;
+  breathPhase: number;
 }
 
 export interface EnemyHit {
@@ -125,6 +151,25 @@ export class EnemyManager {
         strobePhase: this.rng.range(0, 6.28),
         visible: true,
         animateSkip: 0,
+        hipYaw: 0,
+        torsoYaw: 0,
+        headYaw: 0,
+        groundSpeed: 0,
+        prevGroundSpeed: 0,
+        prevPosition: spawn.position.clone(),
+        leanPitch: 0,
+        leanPitchVel: 0,
+        leanRoll: 0,
+        leanRollVel: 0,
+        recoil: 0,
+        recoilVel: 0,
+        hitPitch: 0,
+        hitPitchVel: 0,
+        hitRoll: 0,
+        hitRollVel: 0,
+        bodyPitch: 0,
+        bodyRoll: 0,
+        breathPhase: this.rng.range(0, 6.28),
       });
     }
   }
@@ -145,7 +190,9 @@ export class EnemyManager {
     this.poseTestOrigin.copy(origin);
     this.poseTestForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     if (!enabled) return;
-    const distances = [2, 4, 8, 12];
+    // The inspection distances the rig has to hold up at: arm's length,
+    // knife-fight, room, across-the-yard, and the far end of the level.
+    const distances = [2, 4, 8, 15, 30];
     for (let i = 0; i < this.enemies.length; i++) {
       const enemy = this.enemies[i];
       if (i < distances.length) {
@@ -153,7 +200,7 @@ export class EnemyManager {
           .copy(origin)
           .addScaledVector(this.poseTestForward, distances[i])
           // Fan them slightly apart so none occludes another.
-          .addScaledVector(SIDE.crossVectors(this.poseTestForward, UP_AXIS).normalize(), (i - 1.5) * 0.9);
+          .addScaledVector(SIDE.crossVectors(this.poseTestForward, UP_AXIS).normalize(), (i - 2) * 0.9);
         enemy.home.y = origin.y;
         enemy.patrolTo.copy(enemy.home);
         enemy.position.copy(enemy.home);
@@ -222,9 +269,19 @@ export class EnemyManager {
     const enemy = this.enemies[index];
     if (!enemy || enemy.state === 'dead' || enemy.state === 'dying') return false;
     enemy.health -= amount;
-    // Flinch: a short lean away from the incoming round.
+    // Flinch. The incoming direction is resolved into the soldier's OWN frame
+    // so a shot from the front pitches the torso back, one from the side rolls
+    // it, and one from behind pitches it forward - instead of every hit
+    // producing the same isolated limb rotation.
     enemy.flinch = ENEMY_CONFIG.flinchTime;
     enemy.flinchDirection.copy(fromDirection).setY(0).normalize();
+    const localForward = Math.cos(enemy.facing) * enemy.flinchDirection.z
+      + Math.sin(enemy.facing) * enemy.flinchDirection.x;
+    const localRight = Math.cos(enemy.facing) * enemy.flinchDirection.x
+      - Math.sin(enemy.facing) * enemy.flinchDirection.z;
+    const force = 2.4 + this.rng.range(0, 1.6) + Math.min(amount, 60) * 0.02;
+    enemy.hitPitchVel += localForward * force;
+    enemy.hitRollVel += localRight * force * 0.85;
     // Being shot immediately wakes an idle enemy.
     if (enemy.state === 'idle') {
       enemy.state = 'alert';
@@ -287,20 +344,44 @@ export class EnemyManager {
       enemy.rig.root.position.copy(enemy.position);
 
       if (phase < 8) {
-        // 0-2 idle, 2-4 moving, 4-6 aiming, 6-8 firing.
+        // 0-2 idle, 2-4 walking, 4-6 running, 6-8 aiming/firing.
         enemy.state = phase < 2 ? 'idle' : 'alert';
-        if (phase >= 4) enemy.state = 'firing';
-        if (phase >= 6 && Math.floor(phase * 8) % 2 === 0) enemy.flinch = 0;
+        if (phase >= 6) enemy.state = 'firing';
         enemy.deathTimer = 0;
-        enemy.rig.root.rotation.x = 0;
-        enemy.rig.root.rotation.z = 0;
+
+        // Actually TRANSLATE during the locomotion phases. The stride is driven
+        // by measured displacement, so a stationary soldier has no gait - the
+        // walk cannot be inspected without real movement.
+        if (phase >= 6 && Math.floor(phase * 8) % 2 === 0 && enemy.recoil < 0.02) {
+          enemy.recoilVel += 5.2;
+        }
+        if (phase >= 2 && phase < 6) {
+          const speed = phase < 4 ? 1.5 : ENEMY_CONFIG.strafeSpeed;
+          SIDE.crossVectors(this.poseTestForward, UP_AXIS).normalize();
+          // Shuttle about the home position rather than integrating a
+          // velocity. Integrating leaves a net drift every time a phase starts
+          // or ends mid-cycle, and over a few loops the subject wanders out of
+          // frame - which makes the whole point of fixed inspection distances
+          // moot. Setting the position absolutely is drift-free, and the rig
+          // still sees genuine displacement, which is what drives the stride.
+          const swing = Math.sin(elapsed * (speed / POSE_TEST_EXCURSION));
+          enemy.position.copy(enemy.home).addScaledVector(SIDE, swing * POSE_TEST_EXCURSION);
+        } else {
+          enemy.position.copy(enemy.home);
+        }
+
         this.animate(enemy, dt, elapsed);
       } else if (phase < 10) {
-        // Hit reactions.
+        // Hit reactions from all four sides in turn, so front/back/left/right
+        // responses can be compared.
         enemy.state = 'firing';
         if (enemy.flinch <= 0) {
           enemy.flinch = ENEMY_CONFIG.flinchTime;
-          enemy.flinchDirection.set(Math.sin(elapsed * 3), 0, Math.cos(elapsed * 3)).normalize();
+          const quadrant = Math.floor((phase - 8) * 2) % 4;
+          const angle = enemy.facing + (quadrant * Math.PI) / 2;
+          enemy.flinchDirection.set(Math.sin(angle), 0, Math.cos(angle));
+          enemy.hitPitchVel += Math.cos((quadrant * Math.PI) / 2) * 3.2;
+          enemy.hitRollVel += Math.sin((quadrant * Math.PI) / 2) * 2.8;
         }
         this.animate(enemy, dt, elapsed);
       } else {
@@ -347,11 +428,12 @@ export class EnemyManager {
     enemy.rig.root.position.copy(enemy.position);
 
     // --- face the player ---
+    // The body no longer snaps as one piece. `facing` is the AIM direction; the
+    // hips, torso and head each chase it at their own rate in animate(), which
+    // is what stops the soldier reading as a turret.
     this.tmpVec.subVectors(playerEye, enemy.position);
     const distance = this.tmpVec.length();
-    const targetFacing = Math.atan2(this.tmpVec.x, this.tmpVec.z);
-    enemy.facing = dampAngle(enemy.facing, targetFacing, 6, dt);
-    enemy.rig.root.rotation.y = enemy.facing;
+    enemy.facing = Math.atan2(this.tmpVec.x, this.tmpVec.z);
 
     // --- can it see the player? ---
     const eye = this.tmpVec2.copy(enemy.position).add(enemy.rig.headOffset);
@@ -411,6 +493,11 @@ export class EnemyManager {
     direction.z += this.rng.spread(spread);
     direction.normalize();
 
+    // Recoil is absorbed by the whole upper body, with per-shot variation so a
+    // burst never produces identical mechanical motion.
+    enemy.recoilVel += 5.2 + this.rng.range(-1.1, 1.4);
+    enemy.hitPitchVel -= 0.9 + this.rng.range(0, 0.5);
+
     this.bus.emit('enemy:fired', { origin: muzzle, direction });
   }
 
@@ -436,47 +523,173 @@ export class EnemyManager {
     }
   }
 
+  /**
+   * Procedural secondary motion.
+   *
+   * The rig is still rigid parts - there is no skinning - so the goal here is
+   * not to fake deformation but to remove the two things that actually make a
+   * character read as mechanical:
+   *
+   *   1. every segment rotating about its own pivot in lockstep, and
+   *   2. the whole body snapping to face a target as one unit.
+   *
+   * Everything below is transform maths on the existing hierarchy: no extra
+   * meshes, no extra draw calls.
+   *
+   * LAYERS, applied in order:
+   *   yaw chain    hips lag the aim, torso twists toward it, head leads
+   *   locomotion   stride driven by MEASURED displacement, not a constant
+   *   weight       pelvis bob, lateral shift and roll onto the planted foot
+   *   lean         acceleration-driven forward/side lean on a spring
+   *   breathing    slow idle motion so a stationary soldier is never frozen
+   *   recoil       firing impulse absorbed through torso, arms and head
+   *   hit          two-stage: sharp local response, slower body follow-through
+   */
   private animate(enemy: Enemy, dt: number, elapsed: number): void {
-    const moving = enemy.state !== 'idle';
-    const speed = moving ? ENEMY_CONFIG.strafeSpeed : 0;
-    enemy.walkPhase += dt * (2.2 + speed * 1.4);
+    const rig = enemy.rig;
+    // Springs are integrated explicitly, so cap the step. The animation LOD
+    // feeds a 3x dt for distant hostiles and that would otherwise overshoot.
+    const step = Math.min(dt, 0.05);
 
-    const stride = moving ? 0.55 : 0.06;
+    // ---------------------------------------------------------------
+    // 1. Yaw chain - hips lag, torso twists, head leads
+    // ---------------------------------------------------------------
+    const aiming = enemy.state === 'firing';
+    // A soldier only repositions their feet once the twist gets uncomfortable;
+    // below that the torso does the work. That threshold is what produces the
+    // characteristic "turn the upper body first, then step round" motion.
+    const twist = shortAngle(enemy.facing - enemy.hipYaw);
+    const hipRate = Math.abs(twist) > 0.55 ? 3.4 : 0.7;
+    enemy.hipYaw = dampAngle(enemy.hipYaw, enemy.facing, hipRate, dt);
+    enemy.torsoYaw = dampAngle(enemy.torsoYaw, enemy.facing, aiming ? 7 : 4.5, dt);
+    enemy.headYaw = dampAngle(enemy.headYaw, enemy.facing, aiming ? 11 : 8, dt);
+
+    // ---------------------------------------------------------------
+    // 2. Locomotion - stride from MEASURED displacement
+    // ---------------------------------------------------------------
+    // Driving the walk cycle from a constant speed is the main cause of foot
+    // sliding: the feet cycle at a rate unrelated to how far the body moved.
+    const moved = Math.hypot(
+      enemy.position.x - enemy.prevPosition.x,
+      enemy.position.z - enemy.prevPosition.z,
+    );
+    enemy.prevPosition.copy(enemy.position);
+    const instantSpeed = dt > 0.0001 ? moved / dt : 0;
+    enemy.groundSpeed = damp(enemy.groundSpeed, instantSpeed, 9, dt);
+
+    const STRIDE = 1.05;
+    // Half a cycle per step, so the phase advances with distance travelled.
+    enemy.walkPhase += (moved / STRIDE) * Math.PI;
+    // A stationary soldier still shifts weight, just very slowly.
+    enemy.walkPhase += dt * 0.55;
+
+    const gait = clamp01(enemy.groundSpeed / ENEMY_CONFIG.strafeSpeed);
     const swing = Math.sin(enemy.walkPhase);
-    const leftKnee = enemy.rig.leftLeg.userData.knee as THREE.Group;
-    const rightKnee = enemy.rig.rightLeg.userData.knee as THREE.Group;
-    enemy.rig.leftLeg.rotation.x = swing * stride * 0.5;
-    enemy.rig.rightLeg.rotation.x = -swing * stride * 0.5;
-    // Knees only bend forward.
-    leftKnee.rotation.x = Math.max(0, -swing) * stride * 0.7;
-    rightKnee.rotation.x = Math.max(0, swing) * stride * 0.7;
-    // Hip bob and counter-rotation of the torso.
-    enemy.rig.hips.position.y = 0.92 + Math.abs(Math.cos(enemy.walkPhase)) * 0.035 * (moving ? 1 : 0.2);
-    enemy.rig.hips.rotation.y = swing * 0.09 * (moving ? 1 : 0.3);
-    enemy.rig.torso.rotation.y = -swing * 0.07 * (moving ? 1 : 0.3);
+    const bob = Math.cos(enemy.walkPhase * 2);
 
-    // Weapon comes up when firing.
-    const aim = enemy.state === 'firing' ? 1 : 0;
-    enemy.rig.rightArm.rotation.x = damp(enemy.rig.rightArm.rotation.x, lerp(-0.75, -1.35, aim), 8, dt);
-    enemy.rig.leftArm.rotation.x = damp(enemy.rig.leftArm.rotation.x, lerp(-0.7, -1.25, aim), 8, dt);
-    enemy.rig.head.rotation.x = damp(enemy.rig.head.rotation.x, aim * -0.12, 6, dt);
+    // ---------------------------------------------------------------
+    // 3. Legs - swing, knee lift, and a stance that widens with speed
+    // ---------------------------------------------------------------
+    const stride = 0.10 + gait * 0.52;
+    const leftKnee = rig.leftLeg.userData.knee as THREE.Group;
+    const rightKnee = rig.rightLeg.userData.knee as THREE.Group;
+    rig.leftLeg.rotation.x = swing * stride;
+    rig.rightLeg.rotation.x = -swing * stride;
+    // The knee only bends on the SWING leg (the one travelling forward); the
+    // stance leg stays straight and carries the body. Bending both is what
+    // makes a procedural walk look like a crouching shuffle.
+    leftKnee.rotation.x = Math.max(0, -swing) * (0.12 + gait * 0.85);
+    rightKnee.rotation.x = Math.max(0, swing) * (0.12 + gait * 0.85);
 
-    // Flinch: lean away from the hit, snapping in and easing out.
-    if (enemy.flinch > 0) {
-      enemy.flinch = Math.max(0, enemy.flinch - dt);
-      const f = enemy.flinch / ENEMY_CONFIG.flinchTime;
-      const local = enemy.flinchDirection;
-      enemy.rig.torso.rotation.x += f * ENEMY_CONFIG.flinchAmount * (1 + local.z * 0.2);
-      enemy.rig.torso.rotation.z += f * ENEMY_CONFIG.flinchAmount * local.x;
-      enemy.rig.head.rotation.z = f * ENEMY_CONFIG.flinchAmount * 0.8;
-    } else {
-      enemy.rig.head.rotation.z = damp(enemy.rig.head.rotation.z, 0, 8, dt);
-    }
+    // ---------------------------------------------------------------
+    // 4. Pelvis - vertical bob, lateral weight transfer, roll
+    // ---------------------------------------------------------------
+    const breath = Math.sin(elapsed * 1.15 + enemy.breathPhase);
+    // Lowest at mid-stance, highest at the pass; amplitude scales with gait so
+    // an idle soldier does not bounce.
+    rig.hips.position.y = 0.92 - 0.045 * gait * (1 - bob) * 0.5 + breath * 0.006 * (1 - gait);
+    // Weight shifts onto the planted foot.
+    rig.hips.position.x = swing * 0.035 * gait;
+    // Pelvis drops slightly on the swing side.
+    rig.hips.rotation.z = -swing * 0.075 * gait;
+    // Pelvis rotation about the vertical, opposed by the shoulders below.
+    rig.hips.rotation.y = swing * 0.13 * gait;
+
+    // ---------------------------------------------------------------
+    // 5. Lean from acceleration
+    // ---------------------------------------------------------------
+    const accel = (enemy.groundSpeed - enemy.prevGroundSpeed) / Math.max(dt, 0.0001);
+    enemy.prevGroundSpeed = enemy.groundSpeed;
+    const targetPitch = clamp(accel * 0.012, -0.10, 0.14) + gait * 0.055;
+    enemy.leanPitchVel += (targetPitch - enemy.leanPitch) * 46 * step - enemy.leanPitchVel * 9 * step;
+    enemy.leanPitch += enemy.leanPitchVel * step;
+    // Lateral lean into the direction of travel relative to facing.
+    const strafeSign = Math.sin(shortAngle(enemy.facing - enemy.hipYaw));
+    enemy.leanRollVel += (strafeSign * gait * 0.06 - enemy.leanRoll) * 40 * step - enemy.leanRollVel * 8 * step;
+    enemy.leanRoll += enemy.leanRollVel * step;
+
+    // ---------------------------------------------------------------
+    // 6. Recoil and hit springs
+    // ---------------------------------------------------------------
+    enemy.recoilVel -= enemy.recoil * 260 * step + enemy.recoilVel * 17 * step;
+    enemy.recoil += enemy.recoilVel * step;
+
+    // Sharp local response...
+    enemy.hitPitchVel -= enemy.hitPitch * 150 * step + enemy.hitPitchVel * 11 * step;
+    enemy.hitPitch += enemy.hitPitchVel * step;
+    enemy.hitRollVel -= enemy.hitRoll * 150 * step + enemy.hitRollVel * 11 * step;
+    enemy.hitRoll += enemy.hitRollVel * step;
+    // ...followed by a slower whole-body follow-through that trails it.
+    enemy.bodyPitch = damp(enemy.bodyPitch, enemy.hitPitch * 0.45, 7, dt);
+    enemy.bodyRoll = damp(enemy.bodyRoll, enemy.hitRoll * 0.45, 7, dt);
+    if (enemy.flinch > 0) enemy.flinch = Math.max(0, enemy.flinch - dt);
+
+    // ---------------------------------------------------------------
+    // 7. Compose
+    // ---------------------------------------------------------------
+    // Hips carry the follow-through, not the sharp response.
+    rig.root.rotation.y = enemy.hipYaw;
+    rig.root.rotation.x = enemy.bodyPitch * 0.5;
+    rig.root.rotation.z = enemy.bodyRoll * 0.5;
+
+    // Torso: twist toward the aim, counter-rotate against the pelvis, lean,
+    // absorb recoil, and take the sharp part of a hit.
+    const torsoTwist = clamp(shortAngle(enemy.torsoYaw - enemy.hipYaw), -0.95, 0.95);
+    rig.torso.rotation.y = torsoTwist - swing * 0.16 * gait;
+    rig.torso.rotation.x =
+      enemy.leanPitch + enemy.recoil * 0.09 + enemy.hitPitch * 0.55 + breath * 0.012;
+    rig.torso.rotation.z = enemy.leanRoll + enemy.hitRoll * 0.55 + swing * 0.03 * gait;
+
+    // Head: leads the torso, and STABILISES - it counters most of the body's
+    // bob and lean so the eyeline stays level, which is what real heads do and
+    // what most procedural rigs forget.
+    const headTwist = clamp(shortAngle(enemy.headYaw - enemy.torsoYaw), -0.7, 0.7);
+    rig.head.rotation.y = damp(rig.head.rotation.y, headTwist, 12, dt);
+    rig.head.rotation.x = damp(
+      rig.head.rotation.x,
+      -(enemy.leanPitch * 0.75) - enemy.hitPitch * 0.22 + (aiming ? -0.10 : 0),
+      10,
+      dt,
+    );
+    rig.head.rotation.z = damp(rig.head.rotation.z, -enemy.leanRoll * 0.6 - enemy.hitRoll * 0.3, 9, dt);
+
+    // ---------------------------------------------------------------
+    // 8. Arms - swing when walking, up on the weapon when aiming
+    // ---------------------------------------------------------------
+    const aim = aiming ? 1 : 0;
+    // Arms swing opposite to the legs, but only while the weapon is down.
+    const armSwing = -swing * 0.42 * gait * (1 - aim);
+    const rightBase = lerp(-0.80, -1.32, aim) - enemy.recoil * 0.16;
+    const leftBase = lerp(-0.74, -1.24, aim) - enemy.recoil * 0.10;
+    rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, rightBase + armSwing, 9, dt);
+    rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, leftBase - armSwing, 9, dt);
+    // Shoulders follow the weapon rather than staying square to the chest.
+    rig.rightArm.rotation.z = damp(rig.rightArm.rotation.z, -0.22 - aim * 0.06, 8, dt);
+    rig.leftArm.rotation.z = damp(rig.leftArm.rotation.z, 0.30 + aim * 0.08, 8, dt);
 
     // IR strobe blink - the readability aid, not a decoration.
     const blink = Math.sin(elapsed * 4.2 + enemy.strobePhase);
-    (enemy.rig.strobe.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      blink > 0.72 ? 9 : 1.1;
+    (rig.strobe.material as THREE.MeshStandardMaterial).emissiveIntensity = blink > 0.72 ? 9 : 1.1;
   }
 
   reset(): void {
@@ -524,6 +737,14 @@ function raySphere(
   return t;
 }
 
+/** Signed shortest angular difference, in (-PI, PI]. */
+function shortAngle(delta: number): number {
+  let d = delta;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
 /** Angle damping that takes the short way around. */
 function dampAngle(current: number, target: number, rate: number, dt: number): number {
   let delta = target - current;
@@ -533,4 +754,6 @@ function dampAngle(current: number, target: number, rate: number, dt: number): n
 }
 
 const SIDE = new THREE.Vector3();
+/** Half-width of the pose-test shuttle, in metres. */
+const POSE_TEST_EXCURSION = 1.1;
 const UP_AXIS = new THREE.Vector3(0, 1, 0);

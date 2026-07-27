@@ -51,3 +51,28 @@ Ordered by severity. Nothing here is fixed; this is the honest defect list.
 | X3 | Desktop only; no touch or gamepad input |
 | X4 | Boot spends ~0.4 s generating textures on the main thread. A Web Worker would remove the hitch |
 | X5 | `body[data-phase]` / `body[data-tick]` diagnostics are always written; harmless but should be dev-gated before shipping |
+
+---
+
+## Added during the third visual pass (2026-07)
+
+**Enemy rigidity is now animative-solved but geometrically unsolved.** Limb segments are rigid
+capsules: nothing deforms at a joint, shoulders and hips cannot compress, there is no cloth or gear
+sway, and there are no fingers. The secondary-motion system (QUALITY_REPORT §5) hides a lot of this
+in movement, but a static close-up at 2 m still reads as a mechanism. Only skinned meshes fix it.
+
+**Enemy motion has never been watched at frame rate.** It was inspected as still frames at
+2 / 4 / 8 / 15 / 30 m. This browser throttles the page to ~4 fps whenever it is scripted, so what
+was sampled is not what a player would see.
+
+**Blast light is not occluded.** A point light with no shadow map bleeds through thin geometry near
+the blast. Deliberate: a cube shadow map for a 0.6 s light forces a material recompile per
+detonation. The reduced blast radius makes it rare rather than absent.
+
+**The drum chain has only one hop in this level.** Both clusters are tight enough that the first
+detonation kills every neighbour outright, and the two clusters are 14 m apart — outside the 7.5 m
+radius. So the damage-threshold rule is verified by the *survivors*, not by a drum that takes
+partial damage and dies to a second blast. Moving a drum to ~6 m from a cluster would exercise it.
+
+**Player death and mission completion remain unverified.** Unchanged from the previous pass, and
+now the single largest untested area in the project.

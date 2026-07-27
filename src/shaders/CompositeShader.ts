@@ -144,7 +144,15 @@ void main() {
   color += texture2D( tBloom, vUv ).rgb * uBloomStrength;
 
   // Damage feedback pulses before exposure so it feels like light, not paint.
-  color += uDamageColor * uDamageFlash * ( 0.35 + dot( vUv - 0.5, vUv - 0.5 ) * 2.2 );
+  //
+  // It MUST be a vignette. The previous form had a 0.35 constant term, which
+  // added the same red to every pixel in the frame - the sky included. Any
+  // hit, however trivial, therefore washed the whole image with a flat colour
+  // that no amount of exposure work could recover, and it was indistinguishable
+  // from a rendering fault. Zero in the centre, rising toward the corners,
+  // leaves the scene readable while still being impossible to miss.
+  float dmgR = length( vUv - 0.5 ) * 1.4142;
+  color += uDamageColor * uDamageFlash * ( pow( dmgR, 2.6 ) * 1.7 + 0.03 );
 
   // White balance, in scene-referred linear space and BEFORE the tonemap -
   // the only place it is physically meaningful. Balancing the camera for a

@@ -299,6 +299,8 @@ export class ParticleSystem {
       uSunColor: { value: new THREE.Color(0xffb070) },
       uAmbientColor: { value: new THREE.Color(0x3d5a7a) },
       uAmbientIntensity: { value: 0.85 },
+      uFlashLight: { value: new THREE.Vector4(0, 0, 0, 0) },
+      uFlashColor: { value: new THREE.Color(0xff8a3a) },
     };
     // Sparks and fire are the smaller half of the budget: smoke needs more
     // instances to build up density.
@@ -321,6 +323,17 @@ export class ParticleSystem {
     (this.sharedUniforms.uSunColor.value as THREE.Color).copy(sunColor);
     (this.sharedUniforms.uAmbientColor.value as THREE.Color).copy(ambientColor);
     this.sharedUniforms.uAmbientIntensity.value = ambientIntensity * 0.5;
+  }
+
+  /** Blast light for smoke to catch. Intensity 0 disables it. */
+  setFlashLight(position: THREE.Vector3, intensity: number, color: THREE.Color): void {
+    (this.sharedUniforms.uFlashLight.value as THREE.Vector4).set(
+      position.x,
+      position.y,
+      position.z,
+      intensity,
+    );
+    (this.sharedUniforms.uFlashColor.value as THREE.Color).copy(color);
   }
 
   emit(

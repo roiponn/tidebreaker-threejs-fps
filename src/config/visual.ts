@@ -130,7 +130,7 @@ export const VISUAL_CONFIG = {
   },
 
   bloom: {
-    strength: 0.42,
+    strength: 0.48,
     radius: 0.62,
     /** Threshold in linear HDR - only genuine emitters should bloom. */
     threshold: 0.92,
@@ -233,9 +233,9 @@ export const VISUAL_CONFIG = {
   },
 
   explosion: {
-    lightIntensity: 1500,
-    lightDistance: 46,
-    lightDuration: 0.55,
+    lightIntensity: 430,
+    lightDistance: 40,
+    lightDuration: 0.62,
     radius: 7.5,
     damage: 90,
   },

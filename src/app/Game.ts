@@ -27,6 +27,7 @@ import { Player } from '@/player/Player';
 import { WeaponController } from '@/weapons/WeaponController';
 import { Ballistics } from '@/weapons/Ballistics';
 import { EnemyManager } from '@/enemies/EnemyManager';
+import { ChainTest } from '@/debug/ChainTest';
 import { VfxManager } from '@/effects/VfxManager';
 import { AudioEngine } from '@/audio/AudioEngine';
 
@@ -89,6 +90,8 @@ export class Game {
   private rafHandle = 0;
   private started = false;
   private particleScale = 1;
+  /** Non-null while ?chaintest= is running. */
+  private chainTest: ChainTest | null = null;
   /** >0 while a ?boom= test detonation is pending; repeats on an interval. */
   private boomTimer = 0;
   private boomInterval = 0;
@@ -219,6 +222,37 @@ export class Game {
       // ?boom=N detonates a charge N seconds into play, 7m ahead of the
       // player. Verifying blast brightness by trying to shoot a fuel drum with
       // synthetic input is not repeatable; this is.
+      // ?chaintest=1 runs the deterministic drum chain-reaction test; see
+      // src/debug/ChainTest.ts for why this cannot be done by hand.
+      if (params.has('chaintest')) {
+        const runs = Number(params.get('chaintest'));
+        this.chainTest = new ChainTest(
+          this.explosives,
+          () => ({ particles: this.vfx.stats.particles, lights: this.vfx.activeLights }),
+          // Which drum to shoot. Default is the 4-drum fuel dump; drums 0 and
+          // 1 sit 14m away and must survive it. ?chainseed=0 tests the pair.
+          // (`|| 2` would be wrong here: drum 0 is a valid, falsy index.)
+          params.has('chainseed') ? Number(params.get('chainseed')) : 2,
+          Number.isFinite(runs) && runs > 0 ? Math.min(runs, 5) : 3,
+        );
+        this.chainTest.start(1.5);
+      }
+      // ?boomslow=N stretches the blast light's lifetime by N. The decay curve
+      // is normalised over the lifetime, so every life fraction looks exactly
+      // as it does at speed - it just holds long enough to be screenshotted.
+      // (Particles keep their own timing, so only the LIGHT is meaningful in
+      // a slowed capture.)
+      // ?boomhold=L pins the blast light at life fraction L (0 = ignition,
+      // 0.08 = peak, 1 = extinguished) so each point on the curve can be
+      // screenshotted without racing a sub-second event.
+      const boomHold = Number(params.get('boomhold'));
+      if (params.has('boomhold') && Number.isFinite(boomHold)) {
+        this.vfx.blastHoldLife = Math.max(0, Math.min(1, boomHold));
+      }
+      const boomSlow = Number(params.get('boomslow'));
+      if (Number.isFinite(boomSlow) && boomSlow > 1) {
+        this.visual.explosion.lightDuration *= boomSlow;
+      }
       if (params.has('boom')) {
         const delay = Number(params.get('boom'));
         this.boomInterval = Number.isFinite(delay) && delay > 0 ? delay : 4;
@@ -333,19 +367,24 @@ export class Game {
       }),
     );
     this.disposer.onDispose(
-      this.bus.on('player:damaged', () => {
+      this.bus.on('player:damaged', ({ amount }) => {
         this.audio.playPlayerHit();
-        this.renderSystem.pulseDamage(0.5);
+        // Proportional to the hit, with a floor so even a graze registers.
+        this.renderSystem.pulseDamage(0.18 + Math.min(amount, 45) / 45 * 0.62);
       }),
     );
     this.disposer.onDispose(
       this.bus.on('explosion', ({ position, radius, power }) => {
+        if (this.chainTest) this.chainTest.explosionsSeen++;
         this.audio.playExplosion(position, power);
         // Blast damage to the player, plus a hard screen kick.
         const damage = this.explosives.getBlastDamage(position, this.player.position);
         if (damage > 0) {
+          // player.damage() emits player:damaged, which already pulses the
+          // screen in proportion to the hit. Adding a second fixed pulse here
+          // meant a 0.4-damage graze at the edge of the blast produced the
+          // same full-strength red as a lethal one.
           this.player.damage(damage, position);
-          this.renderSystem.pulseDamage(0.9);
         }
         void radius;
       }),
@@ -565,12 +604,17 @@ export class Game {
       this.onMissionEnded(this.director.phase === 'complete');
     }
 
+    if (this.chainTest) this.chainTest.update(dt);
+
     // Deliberately phase-independent: it must work on the attract/briefing
     // view too, where nothing else is perturbing the scene.
     if (this.boomTimer > 0) {
       this.boomTimer -= dt;
       if (this.boomTimer <= 0) {
-        this.boomTimer = this.boomInterval;
+        // In ?boomhold= mode the light is frozen on its curve, so a repeating
+        // detonation would just stack fireball particles into a screen-wide
+        // wash and hide the very thing being inspected. One shot only.
+        this.boomTimer = this.vfx.blastHoldLife !== null ? 0 : this.boomInterval;
         this.view.getAimDirection(this.tmpVec2);
         this.tmpVec2.y = 0;
         this.tmpVec2.normalize().multiplyScalar(7).add(this.player.position);
@@ -595,6 +639,13 @@ export class Game {
     }
     const tick = Math.floor(this.clock.elapsed).toString();
     if (document.body.dataset.tick !== tick) document.body.dataset.tick = tick;
+    document.body.dataset.blast = this.vfx.blastState;
+    // Render statistics, mirrored for the same reason as everything else here:
+    // the debug panel needs a keypress and a focused canvas, neither of which
+    // a scripted capture session reliably has.
+    document.body.dataset.stats =
+      `calls=${this.renderSystem.drawCalls} tris=${this.renderSystem.triangles} ` +
+      `lights=${countLights(this.scene)} particles=${this.vfx.stats.particles}`;
 
     // --- 10. render ---
     this.renderSystem.setMotion(this.view.motion.x, this.view.motion.y, this.view.motionStrength);
@@ -709,6 +760,16 @@ export class Game {
     this.bus.clear();
     this.scene.clear();
   }
+}
+
+/** Lights actually in the graph and enabled - the forward-renderer cost driver. */
+function countLights(scene: THREE.Scene): number {
+  let n = 0;
+  scene.traverse((o) => {
+    const light = o as THREE.Light;
+    if (light.isLight && light.visible && light.intensity > 0) n++;
+  });
+  return n;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);

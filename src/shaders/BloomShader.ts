@@ -72,13 +72,27 @@ void main() {
 }
 `;
 
-/** 9-tap tent upsample, additively blended onto the next larger mip. */
+/**
+ * 9-tap tent upsample, additively blended onto the next larger mip.
+ *
+ * uWeight attenuates this level's contribution. Because the chain is additive
+ * and each step re-reads what the previous step wrote, the weight applied at
+ * level i multiplies every level coarser than i as well - so a modest per-step
+ * value produces a strong falloff at the widest mips and none at the finest.
+ *
+ * That is the control that keeps bloom LOCAL. Without it, a large bright area
+ * (a fireball filling a quarter of the screen) dumps its energy into the 1/128
+ * -resolution mip, which then tints the entire frame - including the sky -
+ * uniformly. Small emitters never revealed the problem because they never
+ * survive far enough down the chain to reach those mips with any energy.
+ */
 export const BLOOM_UPSAMPLE_FRAG = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D tDiffuse;
 uniform vec2 uTexel;
 uniform float uRadius;
+uniform float uWeight;
 
 void main() {
   vec2 o = uTexel * uRadius;
@@ -91,6 +105,6 @@ void main() {
   result += texture2D( tDiffuse, vUv + vec2( -o.x, -o.y ) ).rgb;
   result += texture2D( tDiffuse, vUv + vec2( 0.0, -o.y ) ).rgb * 2.0;
   result += texture2D( tDiffuse, vUv + vec2( o.x, -o.y ) ).rgb;
-  gl_FragColor = vec4( result * ( 1.0 / 16.0 ), 1.0 );
+  gl_FragColor = vec4( result * ( uWeight / 16.0 ), 1.0 );
 }
 `;

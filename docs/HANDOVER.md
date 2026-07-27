@@ -129,6 +129,22 @@ vfx.onCameraShake  = (amp, freq) => view.addShake(amp, freq);
 `ParticleSystem` has two instanced batches (additive, lit). Adding a new effect means adding a
 `ParticleSpec` to the `SPEC` table at the bottom of `VfxManager.ts` — not a new class.
 
+**The blast light is animated, and the animation is the point.** `updateExplosionLight()` moves
+intensity, radius *and* colour together over the light's life. The radius is the load-bearing part:
+three windows a point light's falloff toward its `distance`, so starting small (34% of full) and
+expanding during decay is what makes near surfaces receive far more than distant ones. Raising
+`lightIntensity` without shrinking `lightDistance` will take you straight back to a flat screen
+tint. The emitter also sits 1.45 m above the charge (`UP_HALF`) so the `1/d²` singularity is not
+sitting on the ground plane.
+
+Smoke receives the blast through `ParticleSystem.setFlashLight()`, fed from the same update, and
+the shader weights it by particle *youth* — old smoke has expanded into a thin wide veil, and
+letting that catch the flash tints the whole frame.
+
+**If the screen ever washes a flat colour during combat, look at `uDamageFlash` in
+`CompositeShader` before you look at the explosion.** It is a vignette now; it used to have a
+constant term, and that constant cost a lot of time to find.
+
 ---
 
 ## 7. Config file map
@@ -203,18 +219,46 @@ Honestly labelled, because these look finished but are not:
 
 ---
 
-## 12. Suggested next work, in order
+## 12. Testing hooks you should keep
 
-1. **Confirm the VFX on screen** (QUALITY_REPORT P6). Fire at a container at 5 m, blow a drum
-   cluster, capture frames. Everything is wired; it is unproven.
-2. **Fix the puddle reflections** (P2). The biggest visual investment currently under-delivers.
-3. **Split the practical palette into warm and cool zones** (P1). Largest first-impression win
-   available for the least work.
-4. **Add a view-model light** (P5). One light, big improvement to the hero asset.
-5. **Give the sky cloud structure near the horizon** (P3).
-6. **Validate frame rate on real hardware** and re-tune the presets. Everything in
-   PERFORMANCE.md about absolute frame times is currently unproven.
-7. **Play the full 90 seconds** with real pointer lock: enemy fire, damage, death, extraction.
-8. **Improve enemy joints** (P4) — overlapping gear at hips and knees, or skinning.
-9. **Spatial merge buckets** in `LevelBuilder` (P7).
-10. **Fix the emissive baseline bug** in `Practicals.update()` (P8).
+Three of these exist because the properties they check are *invisible on screen* — do not delete
+them as debug cruft:
+
+| Hook | Why it cannot be done by hand |
+| --- | --- |
+| `?chaintest=N` ([`src/debug/ChainTest.ts`](../src/debug/ChainTest.ts)) | Single-trigger protection, chain termination, destroyed-drum inertness and pool recycling across repeats produce no visible difference even if you catch the 2 s event |
+| `?boomhold=L` | The blast light's whole life is 0.62 s; pinning it is the only way to compare the same viewpoint at ignition, peak and ember |
+| `?posetest=1` | Freezes the AI and holds five hostiles at fixed distances so pose quality is repeatable rather than whatever the fight happens to produce |
+| `document.body.dataset.*` | A scripted console runs in an isolated world and cannot reach module state |
+
+`ChainTest` writes its whole result set as JSON to `document.body.dataset.chain`. If you change
+drum placement, re-run it — the "out-of-range drums survive" assertion depends on the 14 m gap
+between the two clusters.
+
+---
+
+## 13. Suggested next work, in order
+
+Items 1–5, 8 and 10 of the original list are done (QUALITY_REPORT P1–P6, P8–P11). What remains:
+
+1. **Play the full 90 seconds on real hardware with real pointer lock.** Enemy fire, taking damage,
+   dying, and reaching extraction have never been exercised end to end — this environment refuses
+   pointer lock and throttles the page to ~4 fps whenever it is scripted. This is the largest
+   unverified area in the project and it is a *gameplay* risk, not a visual one.
+2. **Validate frame rate and re-tune the presets.** Everything in PERFORMANCE.md about absolute
+   frame times is unproven; the host here reported 1 fps and 54 fps for near-identical builds, and
+   the Performance preset measured *slower* than Cinematic. Draw calls (638), triangles (302k) and
+   lights (17) are the only hardware-independent numbers available.
+3. **Watch the enemies move at frame rate.** The secondary-motion system (QUALITY_REPORT §5) was
+   inspected in still frames at five distances, not viewed in motion. If anything reads as drunk or
+   rubbery, the first suspects are the hip-yaw break threshold (0.55 rad) and the lean spring rates
+   in `EnemyManager.animate()` — both are documented in place.
+4. **Skinned character meshes.** This is the only route to fixing the remaining rigidity: rigid
+   capsules cannot deform at a joint, shoulders cannot compress, and there is no cloth or gear
+   sway. It replaces the character pipeline, its materials and its animation system at once, so it
+   is a project of its own — not a polish pass. See QUALITY_REPORT §5.
+5. **Spatial merge buckets** in `LevelBuilder` (P7). Buckets are authored-zone based, so a whole
+   zone draws if any part of it is visible. Geometric LODs are also absent.
+6. **A cheap blast occlusion approximation** (P10). Deliberately skipped: a cube shadow map for a
+   0.6 s light forces a material recompile per detonation. If it is wanted, a few shadow rays
+   against the collision world modulating intensity per-frame would be the cheap route.

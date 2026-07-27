@@ -45,8 +45,22 @@ instead of a blank page.
 | `?quality=low` | Force the Performance preset |
 | `?quality=medium` | Force the Balanced preset |
 | `?quality=high` | Force the Cinematic preset |
+| `?exposure=N` | Override the authored exposure (inspect assets lit rather than as silhouettes) |
+| `?posetest=1` | Freeze the AI and line five hostiles up at 2 / 4 / 8 / 15 / 30 m, cycling idle → walk → run → aim/fire → hit reactions → death |
+| `?boom=N` | Detonate a charge N seconds in, 7 m ahead of the player, repeating. Phase-independent, so it works on the briefing view too |
+| `?boomhold=L` | Pin the blast light at life fraction `L` (0 ignition, 0.08 peak, 1 out) so a specific moment can be captured. Implies a single detonation |
+| `?boomslow=N` | Stretch the blast light's lifetime by N. The decay curve is normalised, so every life fraction looks as it does at speed |
+| `?chaintest=N` | Run the deterministic drum chain-reaction test N times; results land on `document.body.dataset.chain` |
+| `?chainseed=I` | Which drum the chain test lights (default 2, the fuel dump; 0 is the pair at the bay mouth) |
+| `?wetdebug=mask\|rough\|reflect` | Visualise the wet-ground fields |
 
 Without a flag the preset is auto-detected from core count and GPU string.
+
+**Diagnostics without a console.** A scripted browser session runs page JavaScript in an isolated
+world and cannot read module state, so the mission mirrors its state onto `<body>` data attributes:
+`data-phase`, `data-tick`, `data-booms`, `data-blast`, `data-stats`, `data-chain`. These cost one
+DOM write per frame and are how every measurement in
+[QUALITY_REPORT.md](docs/QUALITY_REPORT.md) was taken.
 
 ---
 

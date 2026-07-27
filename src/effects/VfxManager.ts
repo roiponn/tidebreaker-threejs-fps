@@ -36,6 +36,17 @@ export class VfxManager {
   private explosionLight: THREE.PointLight;
   private explosionLightTimer = 0;
   private explosionLightPeak = 0;
+  /** Animated blast-light state; see updateExplosionLight(). */
+  private explosionAge = 0;
+  /**
+   * Debug only (?boomhold=): pins the blast light to a fixed point on its
+   * life curve so a specific moment - the peak, early decay, the ember - can
+   * be captured deliberately instead of being chased across a 0.6s window.
+   */
+  blastHoldLife: number | null = null;
+  private readonly explosionHot = new THREE.Color(0xfff0cc);
+  private readonly explosionCool = new THREE.Color(0xff4a12);
+  private readonly explosionTint = new THREE.Color();
 
   private flashMesh: THREE.Mesh;
   private flashTimer = 0;
@@ -349,8 +360,8 @@ export class VfxManager {
     // Light first: the flash has to be on the same frame as the fireball.
     this.explosionLight.position.copy(position).add(UP_HALF);
     this.explosionLightPeak = v.lightIntensity * power;
-    this.explosionLight.intensity = this.explosionLightPeak;
     this.explosionLightTimer = v.lightDuration;
+    this.explosionAge = 0;
 
     // Core fireball: fast, bright, short-lived.
     this.particles.emitBurst('additive', SPEC.fireball, 14, position, UP, 6.5, 1.0, 0.25);
@@ -407,19 +418,74 @@ export class VfxManager {
       this.muzzleLight.intensity *= Math.pow(0.0008, dt);
       if (this.muzzleLightTimer <= 0) this.muzzleLight.intensity = 0;
     }
-    if (this.explosionLightTimer > 0) {
-      this.explosionLightTimer -= dt;
-      const t = clamp01(this.explosionLightTimer / this.visual.explosion.lightDuration);
-      // Fast initial falloff then a lingering ember glow.
-      this.explosionLight.intensity = this.explosionLightPeak * (t * t * 0.85 + t * 0.15);
-      if (this.explosionLightTimer <= 0) this.explosionLight.intensity = 0;
-    }
+    this.updateExplosionLight(dt);
 
     this.updateTracers(dt);
     this.updateCasings(dt);
     this.updateShockwaves(dt);
     this.particles.update(dt, elapsed);
     this.decals.update(dt);
+  }
+
+  /**
+   * Blast light over time.
+   *
+   * A constant-radius point light at a fixed colour lights the whole scene by
+   * the same proportion, which is why the earlier explosion read as a uniform
+   * screen tint rather than as something happening at a place. Three things
+   * change together:
+   *
+   *   INTENSITY  a near-instant attack (~25ms) then a steep exponential decay,
+   *              so the eye reads a flash rather than a lamp switching on.
+   *   RADIUS     starts SMALL (the fireball is a few metres across) and expands
+   *              as it decays. three windows the falloff toward `distance`, so
+   *              a small radius means distant geometry receives almost nothing
+   *              while nearby surfaces are hammered - which is exactly the
+   *              near-field/far-field contrast that was missing.
+   *   COLOUR     a near-white hot core cooling to deep orange, so the light
+   *              itself carries the temperature drop of the fireball.
+   */
+  private updateExplosionLight(dt: number): void {
+    if (this.explosionLightTimer <= 0) {
+      if (this.explosionLight.intensity !== 0) {
+        this.explosionLight.intensity = 0;
+        this.particles.setFlashLight(this.explosionLight.position, 0, this.explosionCool);
+      }
+      return;
+    }
+    this.explosionLightTimer -= dt;
+    this.explosionAge += dt;
+
+    const duration = this.visual.explosion.lightDuration;
+    let life = clamp01(this.explosionAge / Math.max(duration, 0.0001));
+    if (this.blastHoldLife !== null) {
+      life = this.blastHoldLife;
+      this.explosionAge = life * duration;
+      this.explosionLightTimer = duration; // never expires while held
+    }
+    // Attack over the first 8% of the life, then decay.
+    const attack = clamp01(this.explosionAge / (duration * 0.08));
+    const decay = Math.exp(-5.2 * life);
+    const intensity = this.explosionLightPeak * attack * decay;
+    this.explosionLight.intensity = intensity;
+
+    // Radius grows from a tight fireball to a broad afterglow.
+    this.explosionLight.distance = this.visual.explosion.lightDistance * (0.34 + life * 0.66);
+    // Hot core cooling to ember.
+    this.explosionTint.copy(this.explosionHot).lerp(this.explosionCool, Math.pow(life, 0.6));
+    this.explosionLight.color.copy(this.explosionTint);
+
+    // Feed the smoke shader so the column is lit by the same blast.
+    this.particles.setFlashLight(
+      this.explosionLight.position,
+      intensity * 0.005,
+      this.explosionTint,
+    );
+
+    if (this.explosionLightTimer <= 0) {
+      this.explosionLight.intensity = 0;
+      this.particles.setFlashLight(this.explosionLight.position, 0, this.explosionCool);
+    }
   }
 
   private updateTracers(dt: number): void {
@@ -535,6 +601,17 @@ export class VfxManager {
     return { particles: this.particles.liveCount, decals: this.decals.liveCount };
   }
 
+  /** Dynamic lights currently contributing. Used by the chain-reaction test. */
+  get activeLights(): number {
+    return this.explosionLight.intensity > 0 ? 1 : 0;
+  }
+
+  /** Blast-light readout for the diagnostics data attributes. */
+  get blastState(): string {
+    const l = this.explosionLight;
+    return `${l.intensity.toFixed(0)}/${l.distance.toFixed(1)}m@${l.position.x.toFixed(1)},${l.position.y.toFixed(1)},${l.position.z.toFixed(1)}`;
+  }
+
   clear(): void {
     this.particles.clear();
     this.decals.clear();
@@ -589,7 +666,15 @@ interface ShockwaveState {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const UP_HALF = new THREE.Vector3(0, 0.6, 0);
+/**
+ * The blast light sits well above the charge, not at it. A point light 0.6m
+ * off the deck puts its 1/d^2 singularity almost ON the ground plane, so the
+ * few square metres underneath clip to white while nothing further away
+ * receives much - the falloff happens inside the blown-out region where it
+ * cannot be seen. Lifting it to chest height moves the falloff out into the
+ * visible range, which is what makes the pool of light read as a pool.
+ */
+const UP_HALF = new THREE.Vector3(0, 1.45, 0);
 
 /**
  * Particle presets. Kept as module constants so every emission of a given kind
@@ -708,11 +793,13 @@ const SPEC: Record<string, ParticleSpec> = {
     drag: 0.25,
   },
   fireball: {
-    lifetime: 0.42,
-    lifetimeJitter: 0.16,
-    size: 0.55,
+    lifetime: 0.34,
+    lifetimeJitter: 0.12,
+    size: 0.42,
     sizeJitter: 0.45,
-    sizeCurve: (t) => 0.55 + t * 2.4,
+    // Grows less than before: a fireball that expands to fill the screen is
+    // what made the flash read as a global tint instead of a local event.
+    sizeCurve: (t) => 0.5 + t * 1.5,
     alphaCurve: (t) => Math.pow(1 - t, 1.5),
     colorStart: new THREE.Color(0xffe9b0),
     colorEnd: new THREE.Color(0xff3c08),
@@ -729,8 +816,13 @@ const SPEC: Record<string, ParticleSpec> = {
     lifetimeJitter: 1.1,
     size: 0.75,
     sizeJitter: 0.5,
-    sizeCurve: (t) => 0.6 + t * 3.4,
-    alphaCurve: (t) => Math.min(1, t / 0.06) * Math.pow(1 - t, 1.6) * 0.72,
+    sizeCurve: (t) => 0.6 + t * 3.0,
+    // Alpha must fall FASTER than the puff grows. A fixed mass of smoke
+    // spread over a 3x larger radius is roughly an order of magnitude less
+    // dense, so holding alpha near its peak while the sprite triples in size
+    // manufactures smoke out of nothing - and 16 of those at 7m turn the
+    // whole frame, sky included, into a flat coloured veil.
+    alphaCurve: (t) => Math.min(1, t / 0.06) * Math.pow(1 - t, 2.4) * 0.6,
     colorStart: new THREE.Color(0x6a5a4c),
     colorEnd: new THREE.Color(0x2f3339),
     brightness: 0.9,
@@ -745,8 +837,8 @@ const SPEC: Record<string, ParticleSpec> = {
     lifetimeJitter: 0.6,
     size: 0.5,
     sizeJitter: 0.4,
-    sizeCurve: (t) => 0.5 + t * 3.2,
-    alphaCurve: (t) => Math.min(1, t / 0.05) * Math.pow(1 - t, 1.8) * 0.5,
+    sizeCurve: (t) => 0.5 + t * 2.9,
+    alphaCurve: (t) => Math.min(1, t / 0.05) * Math.pow(1 - t, 2.2) * 0.45,
     colorStart: new THREE.Color(0x8f857a),
     colorEnd: new THREE.Color(0x45464a),
     brightness: 0.2,

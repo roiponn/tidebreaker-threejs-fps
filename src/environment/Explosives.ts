@@ -29,6 +29,8 @@ interface Drum {
   wobble: number;
   wobblePhase: number;
   collisionRegistered: boolean;
+  /** Index within `drums`, used by the chain-reaction test log. */
+  id: number;
 }
 
 export class Explosives {
@@ -40,6 +42,15 @@ export class Explosives {
 
   /** Wired by the game so a venting drum can spit fire before it goes. */
   onVentTick: ((position: THREE.Vector3) => void) | null = null;
+
+  /**
+   * Chain-reaction trace, for the deterministic test path (?chaintest=).
+   * Each entry is `id@elapsed:cause`. Reading it is the only way to confirm
+   * propagation order, timing stagger, single-trigger protection and
+   * termination without being able to watch a 2-second event by hand.
+   */
+  readonly chainLog: string[] = [];
+  private clock = 0;
 
   constructor(
     private readonly mats: MaterialLibrary,
@@ -101,6 +112,7 @@ export class Explosives {
         wobble: 0,
         wobblePhase: this.rng.range(0, 6.28),
         collisionRegistered: true,
+        id: this.drums.length,
       };
       this.collision.addBox(
         new THREE.Vector3(position.x - 0.3, position.y, position.z - 0.3),
@@ -130,6 +142,23 @@ export class Explosives {
     }
   }
 
+  /**
+   * Test entry point: force a drum to start its fuse as if it had been shot.
+   * Returns false if it is already lit or destroyed - which is itself part of
+   * what the test verifies.
+   */
+  debugTrigger(index: number): boolean {
+    const drum = this.drums[index];
+    if (!drum || drum.state !== 'intact') return false;
+    this.chainLog.push(`${index}@${this.clock.toFixed(2)}:manual`);
+    this.startFuse(drum);
+    return true;
+  }
+
+  get drumStates(): string {
+    return this.drums.map((d) => d.state[0]).join('');
+  }
+
   private startFuse(drum: Drum): void {
     drum.state = 'venting';
     // A short, visible fuse. Long enough to react to, short enough to feel
@@ -140,6 +169,7 @@ export class Explosives {
   private detonate(drum: Drum): void {
     drum.state = 'gone';
     drum.group.visible = false;
+    this.chainLog.push(`${drum.id}@${this.clock.toFixed(2)}:BLEW`);
     const position = drum.position.clone();
     position.y += 0.45;
     this.bus.emit('explosion', {
@@ -147,19 +177,36 @@ export class Explosives {
       radius: this.visual.explosion.radius,
       power: 1,
     });
-    // Chain reaction: nearby drums light their own fuses, so a cluster goes up
-    // in a stagger instead of one simultaneous flash.
+    // CHAIN REACTION.
+    //
+    // A nearby drum is not detonated directly - it takes blast DAMAGE and, if
+    // that is enough, lights its own fuse. So propagation obeys the same
+    // distance falloff and the same health threshold as gunfire, and a drum on
+    // the edge of the radius survives.
+    //
+    // `state !== 'intact'` is the single-trigger guard: a drum that is already
+    // venting or gone is skipped, so it can never be lit twice and the chain
+    // is guaranteed to terminate (each drum leaves the intact set exactly once).
     for (const other of this.drums) {
       if (other === drum || other.state !== 'intact') continue;
-      if (other.position.distanceTo(drum.position) < this.visual.explosion.radius) {
-        other.state = 'venting';
-        other.fuse = 0.18 + this.rng.range(0, 0.28);
-        other.wobble = 1;
-      }
+      const distance = other.position.distanceTo(drum.position);
+      if (distance >= this.visual.explosion.radius) continue;
+      const falloff = 1 - distance / this.visual.explosion.radius;
+      other.health -= this.visual.explosion.damage * falloff * falloff;
+      other.wobble = 1;
+      if (other.health > 0) continue;
+      // Closer drums cook off sooner, with a little jitter so a cluster does
+      // not detonate as one simultaneous flash.
+      other.state = 'venting';
+      other.fuse = 0.12 + (1 - falloff) * 0.35 + this.rng.range(0, 0.16);
+      this.chainLog.push(
+        `${other.id}@${this.clock.toFixed(2)}:by${drum.id}d${distance.toFixed(1)}`,
+      );
     }
   }
 
   update(dt: number, elapsed: number): void {
+    this.clock = elapsed;
     this.ventSmokeTimer -= dt;
     const emitVent = this.ventSmokeTimer <= 0;
     if (emitVent) this.ventSmokeTimer = 0.045;
@@ -200,6 +247,7 @@ export class Explosives {
   }
 
   reset(): void {
+    this.chainLog.length = 0;
     for (const drum of this.drums) {
       drum.state = 'intact';
       drum.health = 34;

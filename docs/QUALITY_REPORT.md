@@ -18,8 +18,11 @@ Being explicit, because the brief forbids claiming unverified work:
 | Enemies activate, close on the player and return fire | **Verified** — a hostile advanced on the player and the condition bar dropped |
 | Impact particles and bullet-hole decals spawn | **Verified** via the live counters (76 particles, 38 decals) |
 | Shell casings eject and land | **Verified** — a casing is visible on the deck in a captured frame |
-| Explosions fire (drum shot, blast light, screen response) | **Verified** — an explosion frame was captured (and revealed a defect, see #15) |
-| Chain reactions between drums | **NOT verified** — implemented, not isolated in a capture |
+| Explosions fire (drum shot, blast light, screen response) | **Verified** — explosion frames captured at three points on the light curve (see P10) |
+| Explosion light falls off with distance; sky not brightened | **Verified** — `?boomhold=` captures at life 0.08 / 0.30 / 0.75 |
+| Repeated explosions do not accumulate lights, particles or emissive state | **Verified** — 10 consecutive detonations sampled; lights 17→18→17, particles peak ~90 and drain to 0, blast light resets to 0 |
+| Enemy secondary motion (torso twist, pelvis, lean, recoil, hit reactions) | **Implemented and inspected in still frames at 2/4/8/15/30 m.** *Motion* was sampled at roughly 4 fps in this browser, not watched at frame rate — see §4.6 |
+| Chain reactions between drums | **Verified** — deterministic harness, 5 runs across two clusters, dev and production builds (see P9) |
 | Player death and mission completion | **NOT verified** — the loop is implemented; a full kill-to-extraction run was not played |
 | No console errors or warnings | **Verified** — a fresh tab logs only Vite's connection messages |
 | 60 fps at 1080p on a discrete GPU | **NOT verified** — see §4 |
@@ -217,35 +220,168 @@ captured at registration; every frame derives from the base values, never the cu
 `setMasterScale` also wrote light intensity directly while the flicker loop wrote the same
 property — it is now a multiplier the loop applies, so there is exactly one writer.
 
+### P9 — Drum chain reactions (VERIFIED, and the propagation rule changed)
+
+Previously "implemented, not isolated in a capture". A chain is a ~2 second event that fires once
+per playthrough and can only be started by hitting a 0.6 m target with a bullet — and several of
+the properties that matter (single-trigger protection, termination, out-of-range survival, pool
+recycling across repeats) are invisible on screen even when you do catch it.
+
+So it is now driven and read from the simulation rather than from the picture:
+[`src/debug/ChainTest.ts`](../src/debug/ChainTest.ts), reached with `?chaintest=N`
+(`&chainseed=I` picks the drum). Each run records pre-state, triggers exactly one drum, immediately
+re-triggers it, lets the chain settle, re-triggers the destroyed drum, then records the propagation
+trace, final states and pool occupancy — and repeats. Results land on
+`document.body.dataset.chain` as JSON, because a scripted console runs in an isolated world and
+cannot read module state.
+
+**Propagation was also made honest.** A detonating drum used to set its neighbours to `venting`
+directly. It now deals blast **damage** with the same quadratic falloff as everything else, and the
+neighbour lights its own fuse only if that pushes it below zero health — so propagation obeys the
+same distance and threshold rules as gunfire, and a drum near the edge of the radius survives.
+Fuse length now scales with distance, so closer drums cook off sooner.
+
+Measured, 3 runs on the 4-drum fuel dump plus 2 runs on the 2-drum pair, repeated on the production
+build:
+
+```
+1: iiiiii->iigggg [2@1.50:manual | 2@2.30:BLEW | 3@2.30:by2d0.7 | 4@2.30:by2d0.7
+                 | 5@2.30:by2d1.4 | 4@2.56:BLEW | 3@2.60:BLEW | 5@2.60:BLEW] ex=4 p=0 L=0
+2: ... 5@9.20:BLEW | 3@9.28:BLEW | 4@9.31:BLEW ... ex=4 p=0 L=0
+3: ... 3@16.13:BLEW | 4@16.16:BLEW | 5@16.16:BLEW ... ex=4 p=0 L=0
+seed 0: iiiiii->ggiiii [0@1.50:manual | 0@2.28:BLEW | 1@2.28:by0d0.8 | 1@2.58:BLEW] ex=2
+```
+
+| Property | Result |
+| --- | --- |
+| Propagation by distance and damage | Drums at 0.7/0.7/1.4 m all took lethal blast damage and lit |
+| Out-of-range drums unaffected | Drums 0 and 1 (14 m away) stayed `intact` in every fuel-dump run; drums 2–5 stayed intact in every pair run |
+| Timing stagger | Secondary detonations landed 0.18–0.30 s after the primary, in a **different order each run** |
+| Duplicate-trigger protection | Re-triggering a burning drum returned `false` in 5/5 runs |
+| Destroyed drums inert | Re-triggering a `gone` drum returned `false` in 5/5 runs |
+| Out-of-range index | `debugTrigger(999)` returned `false` in 5/5 runs |
+| Termination | Exactly 4 explosions for 4 drums (2 for 2). No drum blew twice; no infinite chain |
+| Pool / light cleanup | `restParticles = 0`, `restLights = 0` after every run |
+| Repeat consistency | Identical outcome across runs and between dev and production builds |
+| Particles, sound, light flash, decals, impulses | All ride the same `explosion` bus event as a single detonation, so they are triggered per drum by construction |
+
+Not covered: player or enemy damage *from a chain specifically* (blast damage is shared code and is
+verified for single detonations), and the chain has only one hop in this level — no drum sits in the
+partial-damage band where it would survive one blast and die to the next, so the threshold rule is
+verified by the survivors rather than by a two-stage cascade.
+
+### P10 — Explosion light falloff and local illumination (FIXED)
+
+The blast used to be a constant-radius, constant-colour point light, which lights everything in the
+level by the same proportion — the reason it read as a screen tint rather than as something
+happening at a place. Three things now change together over its life
+([`VfxManager.updateExplosionLight`](../src/effects/VfxManager.ts)):
+
+| | Behaviour |
+| --- | --- |
+| Intensity | ~25 ms attack, then `exp(-5.2·life)` decay |
+| Radius | 34% of full at ignition, expanding to 100% as it decays |
+| Colour | `#fff0cc` hot core → `#ff4a12` ember, on `pow(life, 0.6)` |
+
+The radius is the part that actually produces the near/far contrast. three windows a point light's
+falloff toward its `distance`, so a *small* radius means distant geometry receives almost nothing
+while nearby surfaces are hammered.
+
+The emitter was also lifted from 0.6 m to 1.45 m above the charge. At 0.6 m the `1/d²` singularity
+sits almost on the ground plane, so the few square metres underneath clip to white and all the
+falloff happens *inside* the blown-out region where it cannot be seen. Peak intensity came down
+2400 → 430 cd accordingly.
+
+Smoke now catches the flash ([`ParticleShader.ts`](../src/shaders/ParticleShader.ts)) with the same
+`1/d²` term and the spherical billboard normal — weighted by particle *youth*, because only compact
+young smoke is dense enough to scatter that much light.
+
+Verified with `?boomhold=L`, which pins the light at a chosen point on its curve so each moment can
+be captured instead of chased across a sub-second window:
+
+| life | Measured | Frame |
+| --- | --- | --- |
+| 0.08 (peak) | 284 cd / 15.7 m | Near ground brightly lit with pebble texture still readable; hostile at 8 m fully lit near-white; hostile at 15 m dimmer; containers at 30 m barely affected; **sky unchanged** |
+| 0.30 | 90 cd / 21.5 m | Warm pool with a clear falloff gradient; far end of the canyon dark |
+| 0.75 (ember) | 9 cd / 33.4 m | Faint warm wash on the near deck only |
+
+**Occlusion was deliberately not implemented.** A cube shadow map for a 0.6 s light would change
+the renderer's shadow-caster count on every detonation, which forces a material recompile and a
+guaranteed hitch — precisely the "highly expensive solution that destabilises the frame" to avoid.
+The reduced radius mitigates it in practice: the light now rarely reaches far enough to be seen
+past an occluder. Light does still bleed through thin geometry near the blast.
+
+### P11 — The full-frame red wash was the damage vignette, not the explosion (FIXED)
+
+Worth recording because I chased it in the wrong place twice. Every explosion near the player
+washed the entire frame — sky included — with a flat red, which looked exactly like a blown-out
+blast light. It was neither the light nor the smoke nor bloom: `uDamageFlash` in the composite was
+added as `uDamageColor · flash · (0.35 + radial)`, and that **0.35 constant** applied the same red
+to every pixel in the image.
+
+Three faults, all fixed:
+1. the term is now a true vignette (`pow(r, 2.6)·1.7 + 0.03`), zero in the centre, strong at the
+   corners;
+2. the blast pulse was a fixed 0.9 regardless of damage taken — a 0.4-damage graze at the edge of
+   the radius produced the same full-strength red as a lethal hit. It is now proportional;
+3. the explosion handler pulsed the screen *and* called `player.damage()`, which emits
+   `player:damaged`, which pulsed it again — 0.9 + 0.5, clamped at the 1.4 maximum. The duplicate
+   is gone.
+
+Two changes made while the diagnosis was still wrong were kept on their own merits, and are stated
+as such rather than as fixes for this bug:
+
+- **Bloom is now local.** The 6-level upsample chain added every mip at full weight, so a large
+  bright area could reach the 1/128-resolution mip and tint the whole frame. Per-level weights
+  (effective `1.00 / 0.92 / 0.75 / 0.53 / 0.29`) leave the near-source glow untouched and damp the
+  frame-wide mip. Strength raised 0.42 → 0.48 to compensate. This does not fix P11 but it is the
+  right behaviour and it is what "local bloom near the blast" requires.
+- **Smoke opacity is now tied to expansion.** Alpha fell as `(1-t)^1.6` while the sprite grew 4×,
+  which manufactures smoke out of nothing. Now `(1-t)^2.4` with a smaller growth curve.
+
+### P12 — Enemy rigid-part appearance (IMPROVED, not eliminated)
+
+See §5.
+
 ## 3. Before/after comparison, same camera
 
 Compared from the identical viewpoint (mission start, standing, looking east down the berth) with
 the HUD hidden. "Pass 1" is the palette/puddle/sky work; "Pass 2" is enemies, the kerb, colour
 rebalance, explosion, flicker and LOD.
 
-| Criterion | Original | Pass 1 | Pass 2 | What changed in pass 2 |
-| --- | --- | --- | --- | --- |
-| First impression | 6.5 | 7.5 | **8** | The deck is now continuous - the "step" was a raised kerb cutting the frame in half |
-| Colour depth | 4 | 7.5 | **8** | Warmth restored through sources, not a global shift; neutrals no longer blue |
-| Atmosphere | 7 | 8 | 8 | Unchanged |
-| Reflection presence | 3 | 7.5 | **8** | Water depth now drives reflection, so pools have shallow rims and deep mirror centres |
-| Cloud / horizon | 3 | 7.5 | 7.5 | Unchanged |
-| Composition | 7 | 7 | **7.5** | Removing the kerb band restored the opening shot's depth |
-| Materials | 6 | 6.5 | **7** | Soldiers got real fabrics instead of the weapon's near-black micro-tiled material |
-| Environment density | 7 | 7 | 7 | Unchanged |
-| Sense of scale | 7 | 7.5 | 7.5 | Unchanged |
-| Weapon presentation | 5.5 | 7 | 7 | Unchanged |
-| Effects | 5 | 6 | **7** | Explosion verified: powerful without clipping; flicker no longer drifts |
-| Readability | 7 | 7.5 | 7.5 | Unchanged |
-| Consistency | 6 | 6.5 | **7.5** | The enemies were the weakest asset; the gap to the view-model is much smaller |
-| Motion quality | 6.5 | 6.5 | **7** | Joints hold together through walk, aim, flinch and death |
-| Movement stability | - | 7 | 7.5 | Puddle coverage distance-stable; shadow/animation LOD introduce no pop |
+"Pass 3" is enemy secondary motion, explosion light falloff, the damage-vignette fix and the
+chain-reaction verification.
 
-**Overall: 6.4 → 7.2 → 7.6 / 10** against the genre standard.
+| Criterion | Original | Pass 1 | Pass 2 | Pass 3 | What changed in pass 3 |
+| --- | --- | --- | --- | --- | --- |
+| First impression | 6.5 | 7.5 | 8 | 8 | Unchanged |
+| Colour depth | 4 | 7.5 | 8 | 8 | Unchanged |
+| Atmosphere | 7 | 8 | 8 | 8 | Unchanged |
+| Reflection presence | 3 | 7.5 | 8 | 8 | Unchanged |
+| Cloud / horizon | 3 | 7.5 | 7.5 | 7.5 | Unchanged |
+| Composition | 7 | 7 | 7.5 | 7.5 | Unchanged |
+| Materials | 6 | 6.5 | 7 | 7 | Unchanged |
+| Environment density | 7 | 7 | 7 | 7 | Unchanged |
+| Sense of scale | 7 | 7.5 | 7.5 | 7.5 | Unchanged |
+| Weapon presentation | 5.5 | 7 | 7 | 7 | Unchanged |
+| Effects | 5 | 6 | 7 | **7.5** | The blast now falls off with distance instead of tinting the frame; the flat red damage wash is gone |
+| Readability | 7 | 7.5 | 7.5 | **8** | Removing the constant term from the damage vignette recovered the whole image during combat |
+| Consistency | 6 | 6.5 | 7.5 | 7.5 | Unchanged |
+| Motion quality | 6.5 | 6.5 | 7 | **7.5** | Hips lag the aim, the torso twists, the pelvis carries weight, recoil travels through the body. Scored conservatively: see §4.6 |
+| Movement stability | - | 7 | 7.5 | 7.5 | Unchanged |
 
-The score moved because the rendered result changed, not because tasks were completed. The two
-largest single gains were finding that the "puddle step" was a piece of geometry and that the
-soldiers were wearing gun metal - both were misdiagnosed until a frame was actually examined.
+**Overall: 6.4 → 7.2 → 7.6 → 7.7 / 10** against the genre standard.
+
+The score moved because the rendered result changed, not because tasks were completed. Pass 3 moves
+it very little, and that is the honest number: two of its three items (chain reactions, explosion
+falloff) are correctness rather than beauty, and the third — enemy motion — cannot be scored from
+stills, so it is scored conservatively.
+
+The recurring lesson across all three passes is the same one: **every large visual defect in this
+project turned out to be a different thing from what it looked like.** The "puddle step" was a
+kerb. The featureless soldiers were wearing gun metal. And the explosion that appeared to blow out
+the whole frame was a damage vignette with a constant term in it. In each case the value-tweaking
+hypothesis was wrong and only looking at an actual frame, then bisecting, found the cause.
 
 What still holds it below ~8.5: the characters are rigid-part with no skinning or cloth, texel
 density is inconsistent between large surfaces and small props, there are no geometric LODs, and
@@ -284,3 +420,53 @@ Stated plainly rather than papered over:
 
 4. **No reference images were provided**, so no comparison was performed. Section 3 is a
    self-assessment from genre memory and is explicitly not a blind comparison.
+
+5. **The browser throttles this page to roughly 4 fps whenever it is being scripted**, and reports
+   `document.hidden === true` at the same time. Simulation time therefore advances at about a fifth
+   of wall-clock during any automated capture. Everything time-sensitive had to be given a
+   deterministic hook rather than being caught by hand — which is why `?boomhold=`, `?chaintest=`
+   and the `document.body.dataset` mirrors exist at all.
+
+6. **Enemy motion was inspected, not watched.** Poses were captured at 2/4/8/15/30 m across idle,
+   walking, running, aiming, firing, hit reaction and death, and consecutive frames differ in the
+   ways the new system predicts (limb phase, torso yaw relative to hips, arm swing gated by aim).
+   But at ~4 fps that is a sparse sample of the animation, not a viewing of it. **I have not
+   watched these soldiers move at frame rate, and I am not claiming the result reads correctly in
+   motion on target hardware.** That is the single biggest open question in this pass.
+
+## 5. The remaining enemy limitation, stated plainly
+
+The soldiers are rigid capsules parented into a hierarchy. Pass 2 closed the joint *gaps*
+geometrically (end-cap hemisphere centres sit exactly on the pivots, so rotation cannot open a
+seam). Pass 3 attacked the other half of the problem — that a rigid-part character reads as a
+puppet when every part moves as one block — without adding a single mesh:
+
+| Layer | What it does |
+| --- | --- |
+| Decoupled yaw chain | Hips lag the aim (and only break past a 0.55 rad threshold), torso twists to make up the difference, head leads. `facing` is now purely the aim direction and no longer snaps the body |
+| Displacement-driven stride | Gait phase advances from *measured* ground displacement, so foot speed matches ground speed and sliding is bounded by frame rate rather than by a guessed constant |
+| Pelvis | Vertical bob, lateral weight shift, drop on the unloaded side, and yaw opposed by the torso |
+| Acceleration lean | Critically damped pitch/roll springs driven by change in ground speed |
+| Recoil chain | A per-shot impulse with random variation travels weapon → arms → shoulders → torso and is partly absorbed, so repeats are never identical |
+| Hit reaction | The hit direction is resolved into the soldier's own frame, seeding directional pitch/roll springs; a sharp local response is followed by a slower whole-body follow-through |
+| Head stabilisation | The head counters the body's lean and bob so the eyeline stays level, damped so it never snaps |
+| Idle breathing | Low-amplitude torso motion so a stationary soldier is not frozen |
+
+**Cost: zero.** Draw calls, triangles and lights measured at the same viewpoint before and after
+this work: **638 / 301,643 / 17 → 638 / 301,643 / 17.** Every change is a transform or a spring;
+no geometry, no materials, no meshes were added. This was a hard constraint of the brief and it
+was met exactly.
+
+**What this cannot fix.** The remaining rigidity is geometric, not animative:
+
+- limb segments are rigid capsules, so nothing deforms at a joint — an elbow is a hinge between two
+  solids, not skin over bone;
+- shoulders and hips cannot compress or shear, so the silhouette at extreme angles is a mechanism;
+- there is no cloth, no gear sway, no secondary motion on straps or pouches;
+- fingers do not exist, so the grip on the weapon is implied by arm placement.
+
+**These require skinned meshes with vertex weights, and authored or IK-solved animation. The
+procedural rig cannot produce them, and I recommend deferring that to a later pass rather than
+attempting a skeletal-mesh migration inside this one** — it would replace the character pipeline,
+the material setup and the animation system at once, which is a larger change than everything in
+this pass combined and is not a "visual polish" task.

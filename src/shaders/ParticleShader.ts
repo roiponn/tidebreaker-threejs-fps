@@ -28,9 +28,11 @@ varying float vAlpha;
 varying float vBright;
 varying float vAge;
 varying vec4 vProjected;
+varying vec3 vWorldPos;
 
 void main() {
   vUv = uv;
+  vWorldPos = aPosition;
   vColor = aColor;
   vAlpha = aAlpha;
   vBright = aParams.x;
@@ -107,6 +109,10 @@ uniform vec3 uSunDirection;
 uniform vec3 uSunColor;
 uniform vec3 uAmbientColor;
 uniform float uAmbientIntensity;
+/** Blast light: xyz = world position, w = intensity. Zero when no explosion. */
+uniform vec4 uFlashLight;
+uniform vec3 uFlashColor;
+varying vec3 vWorldPos;
 
 void main() {
   vec4 tex = texture2D( uTexture, vUv );
@@ -128,6 +134,26 @@ void main() {
 
   // Young smoke is hot and bright, old smoke is cold and thin.
   vec3 color = vColor * lit * ( 1.0 + vBright );
+
+  // SMOKE CATCHES THE FLASH.
+  // Without this the blast lights every solid surface but leaves its own smoke
+  // column unlit, which reads as a bright room with a grey cut-out in it. The
+  // same 1/d^2 falloff as the real light, plus the spherical billboard normal
+  // so the side of the puff facing the blast is brighter.
+  if ( uFlashLight.w > 0.001 ) {
+    vec3 toFlash = uFlashLight.xyz - vWorldPos;
+    float distSq = max( dot( toFlash, toFlash ), 0.35 );
+    float facing = max( dot( worldNormal, normalize( toFlash ) ), 0.0 ) * 0.6 + 0.4;
+    // Weighted by youth. Old smoke has expanded into a thin, wide veil that
+    // can cover the whole frame; letting THAT catch the flash tints the entire
+    // image - sky included - which reads as a colour filter rather than as a
+    // lit smoke column. Only the compact young smoke still at the blast should
+    // respond, which is also the physically sensible answer: it is the only
+    // smoke dense enough to scatter that much light.
+    float youth = 1.0 - smoothstep( 0.15, 0.6, vAge );
+    color += uFlashColor * ( uFlashLight.w / distSq ) * facing * youth;
+  }
+
   gl_FragColor = vec4( color * tex.rgb, alpha );
 }
 `;

@@ -172,6 +172,7 @@ export class RenderSystem {
         tDiffuse: { value: null },
         uTexel: { value: new THREE.Vector2() },
         uRadius: { value: 1 },
+        uWeight: { value: 1 },
       },
       blending: THREE.AdditiveBlending,
       transparent: true,
@@ -612,6 +613,14 @@ export class RenderSystem {
     this.adaptIndex = 1 - this.adaptIndex;
   }
 
+  /**
+   * Per-step upsample weights, indexed by the level being READ. Compounding
+   * down the chain gives effective level weights of roughly
+   * 1.00 / 0.92 / 0.75 / 0.53 / 0.29 - full strength close to the source,
+   * heavily damped at the frame-wide mip.
+   */
+  private static readonly LEVEL_WEIGHT = [1, 1, 0.92, 0.82, 0.7, 0.55];
+
   private renderBloom(sceneTexture: THREE.Texture): void {
     const renderer = this.renderer;
     const p = this.prefilterMat.uniforms;
@@ -631,13 +640,15 @@ export class RenderSystem {
       this.quad.render(renderer);
     }
 
-    // Additive tent upsample back down the chain.
+    // Additive tent upsample back down the chain, with the coarse levels
+    // attenuated so bloom stays local to its source. See BLOOM_UPSAMPLE_FRAG.
     this.quad.material = this.upsampleMat;
     this.upsampleMat.uniforms.uRadius.value = this.visual.bloom.radius * 2;
     for (let i = this.bloomRTs.length - 1; i > 0; i--) {
       const src = this.bloomRTs[i];
       this.upsampleMat.uniforms.tDiffuse.value = src.texture;
       (this.upsampleMat.uniforms.uTexel.value as THREE.Vector2).set(1 / src.width, 1 / src.height);
+      this.upsampleMat.uniforms.uWeight.value = RenderSystem.LEVEL_WEIGHT[i] ?? 1;
       renderer.setRenderTarget(this.bloomRTs[i - 1]);
       this.quad.render(renderer);
     }
