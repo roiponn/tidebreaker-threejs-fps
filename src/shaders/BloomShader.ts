@@ -17,8 +17,6 @@ uniform float uThreshold;
 uniform float uSoftKnee;
 uniform float uClamp;
 
-float luminance( vec3 c ) { return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ); }
-
 vec3 sampleClamped( vec2 uv ) {
   vec3 c = texture2D( tDiffuse, uv ).rgb;
   // Clamp fireflies: a single 500-nit specular pixel would otherwise flicker

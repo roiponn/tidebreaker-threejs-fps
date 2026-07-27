@@ -1,0 +1,620 @@
+/*
+ * HUD styling.
+ *
+ * Design rules:
+ *  - The HUD is diegetic-adjacent: thin strokes, low opacity, one accent
+ *    colour (amber) that already exists in the world's floodlights. Nothing
+ *    saturated, nothing that reads as a web page.
+ *  - Everything sits in the outer 12% of the screen so the centre - where the
+ *    game is - stays clear.
+ *  - No box shadows or gradients that would fight the render's own bloom;
+ *    contrast comes from a subtle dark scrim behind text only.
+ */
+
+:root {
+  --hud-accent: #ffb45c;
+  --hud-accent-dim: rgba(255, 180, 92, 0.45);
+  --hud-text: rgba(232, 238, 245, 0.92);
+  --hud-text-dim: rgba(232, 238, 245, 0.45);
+  --hud-danger: #ff5a44;
+  --hud-good: #6ee7a0;
+  --hud-font: 'DIN Alternate', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+  --hud-mono: 'SF Mono', 'Roboto Mono', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #05070b;
+  color: var(--hud-text);
+  font-family: var(--hud-font);
+  /* The canvas is the product; never let a text selection drag appear. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#viewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* The HUD must never be affected by the renderer's colour pipeline. */
+  z-index: 10;
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.hud.hidden {
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------- */
+/* Crosshair                                                         */
+/* ---------------------------------------------------------------- */
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.12s ease;
+}
+
+.crosshair span {
+  position: absolute;
+  background: var(--hud-text);
+  /* A 1px hairline plus a 1px dark outline stays visible on any background. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.75);
+}
+
+.crosshair .top,
+.crosshair .bottom {
+  width: 2px;
+  height: 7px;
+  left: calc(50% - 1px);
+}
+
+.crosshair .left,
+.crosshair .right {
+  height: 2px;
+  width: 7px;
+  top: calc(50% - 1px);
+}
+
+.crosshair .dot {
+  width: 2px;
+  height: 2px;
+  left: calc(50% - 1px);
+  top: calc(50% - 1px);
+  opacity: 0.8;
+}
+
+/* Hit confirmation: four short diagonal ticks, standard and instantly read. */
+.hitmarker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.hitmarker span {
+  position: absolute;
+  width: 9px;
+  height: 2px;
+  background: var(--hud-text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
+}
+
+.hitmarker.kill span {
+  background: var(--hud-danger);
+}
+
+.hitmarker .tl { top: 3px; left: 1px; transform: rotate(45deg); }
+.hitmarker .tr { top: 3px; right: 1px; transform: rotate(-45deg); }
+.hitmarker .bl { bottom: 3px; left: 1px; transform: rotate(-45deg); }
+.hitmarker .br { bottom: 3px; right: 1px; transform: rotate(45deg); }
+
+/* ---------------------------------------------------------------- */
+/* Ammo                                                              */
+/* ---------------------------------------------------------------- */
+
+.ammo {
+  position: absolute;
+  right: 3.2vw;
+  bottom: 4.2vh;
+  text-align: right;
+  line-height: 1;
+}
+
+.ammo .weapon-name {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--hud-text-dim);
+  margin-bottom: 6px;
+}
+
+.ammo .counts {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  font-family: var(--hud-mono);
+}
+
+.ammo .mag {
+  font-size: 42px;
+  font-weight: 600;
+  color: var(--hud-text);
+  letter-spacing: 0.02em;
+  transition: color 0.15s ease;
+}
+
+.ammo .mag.low {
+  color: var(--hud-danger);
+}
+
+.ammo .reserve {
+  font-size: 18px;
+  color: var(--hud-text-dim);
+}
+
+.ammo .reload-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--hud-accent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.ammo .reload-hint.show {
+  opacity: 1;
+}
+
+/* Reload progress: a thin bar under the counter, mirroring the animation. */
+.reload-bar {
+  margin-top: 8px;
+  margin-left: auto;
+  width: 92px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.reload-bar.show {
+  opacity: 1;
+}
+
+.reload-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--hud-accent);
+}
+
+/* ---------------------------------------------------------------- */
+/* Health / status                                                   */
+/* ---------------------------------------------------------------- */
+
+.status {
+  position: absolute;
+  left: 3.2vw;
+  bottom: 4.2vh;
+  width: 190px;
+}
+
+.status .label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--hud-text-dim);
+  margin-bottom: 6px;
+}
+
+.status .bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  position: relative;
+  overflow: hidden;
+}
+
+.status .bar i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: var(--hud-good);
+  transition: transform 0.12s linear, background-color 0.3s ease;
+}
+
+.status .bar i.hurt {
+  background: var(--hud-danger);
+}
+
+.status .stance {
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--hud-text-dim);
+  height: 12px;
+}
+
+/* Damage vignette: a screen-edge flash, tinted red, driven by health. */
+.damage-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(120, 8, 8, 0) 38%,
+    rgba(140, 10, 10, 0.55) 78%,
+    rgba(90, 4, 4, 0.85) 100%
+  );
+  transition: opacity 0.18s ease;
+}
+
+/* Directional damage indicator: an arc pointing at the shooter. */
+.hit-arc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 280px;
+  height: 280px;
+  margin: -140px 0 0 -140px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.hit-arc svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- */
+/* Objective                                                         */
+/* ---------------------------------------------------------------- */
+
+.objective {
+  position: absolute;
+  top: 4.5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.objective .heading {
+  font-size: 10px;
+  letter-spacing: 0.36em;
+  color: var(--hud-accent-dim);
+  margin-bottom: 6px;
+}
+
+.objective .text {
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: var(--hud-text);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+}
+
+.objective .counter {
+  margin-top: 5px;
+  font-family: var(--hud-mono);
+  font-size: 12px;
+  color: var(--hud-text-dim);
+  letter-spacing: 0.12em;
+}
+
+/* World-space marker for the extraction point. */
+.marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--hud-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--hud-accent);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
+}
+
+.marker .glyph {
+  display: block;
+  width: 13px;
+  height: 13px;
+  margin: 0 auto 4px;
+  border: 1px solid var(--hud-accent);
+  transform: rotate(45deg);
+}
+
+/* ---------------------------------------------------------------- */
+/* Full-screen overlays                                              */
+/* ---------------------------------------------------------------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 10, 0.82);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay h1 {
+  margin: 0;
+  font-size: 40px;
+  letter-spacing: 0.38em;
+  font-weight: 500;
+  color: var(--hud-text);
+  text-indent: 0.38em;
+}
+
+.overlay h2 {
+  margin: 10px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.34em;
+  font-weight: 400;
+  color: var(--hud-accent);
+  text-indent: 0.34em;
+}
+
+.overlay .rule {
+  width: 220px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hud-accent-dim), transparent);
+  margin: 22px 0;
+}
+
+.overlay .body {
+  max-width: 460px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--hud-text-dim);
+  letter-spacing: 0.06em;
+}
+
+.overlay .controls {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 20px;
+  font-size: 12px;
+  color: var(--hud-text-dim);
+  font-family: var(--hud-mono);
+}
+
+.overlay .controls b {
+  color: var(--hud-text);
+  font-weight: 500;
+  text-align: right;
+}
+
+.overlay .prompt {
+  margin-top: 30px;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: var(--hud-accent);
+  animation: pulse 2.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.overlay .stats {
+  margin-top: 4px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 8px 28px;
+  font-family: var(--hud-mono);
+  font-size: 14px;
+}
+
+.overlay .stats span:nth-child(odd) {
+  color: var(--hud-text-dim);
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  align-self: center;
+}
+
+.overlay .stats span:nth-child(even) {
+  color: var(--hud-text);
+  text-align: right;
+}
+
+/* Cinematic bars for the intro. */
+.letterbox {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: #000;
+  transition: height 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.letterbox.top { top: 0; }
+.letterbox.bottom { bottom: 0; }
+.letterbox.show { height: 9vh; }
+
+/* Radio chatter subtitle during the intro. */
+.chatter {
+  position: absolute;
+  bottom: 13vh;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--hud-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--hud-text);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 1);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  text-align: center;
+  max-width: 70vw;
+}
+
+.chatter.show {
+  opacity: 1;
+}
+
+.chatter b {
+  color: var(--hud-accent);
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Performance readout                                               */
+/* ---------------------------------------------------------------- */
+
+.perf {
+  position: absolute;
+  left: 3.2vw;
+  top: 4.5vh;
+  font-family: var(--hud-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--hud-text-dim);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px 12px;
+  border-left: 2px solid var(--hud-accent-dim);
+  display: none;
+}
+
+.perf.show {
+  display: block;
+}
+
+.perf b {
+  color: var(--hud-text);
+  font-weight: 500;
+}
+
+.perf .warn {
+  color: var(--hud-danger);
+}
+
+/* Boot / loading screen. */
+.loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #05070b;
+  z-index: 20;
+  transition: opacity 0.6s ease;
+}
+
+.loader.done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader .title {
+  font-size: 13px;
+  letter-spacing: 0.42em;
+  color: var(--hud-accent);
+  text-indent: 0.42em;
+  margin-bottom: 26px;
+}
+
+.loader .track {
+  width: 240px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.loader .track i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--hud-accent);
+  transition: width 0.25s ease;
+}
+
+.loader .step {
+  margin-top: 14px;
+  font-family: var(--hud-mono);
+  font-size: 11px;
+  color: var(--hud-text-dim);
+  letter-spacing: 0.1em;
+  height: 14px;
+}
+
+/* Fatal-error card. The game must degrade, not vanish. */
+.fatal {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #05070b;
+  z-index: 30;
+  padding: 40px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.fatal.show {
+  display: flex;
+}
+
+.fatal h1 {
+  font-size: 16px;
+  letter-spacing: 0.3em;
+  color: var(--hud-danger);
+  margin: 0 0 18px;
+}
+
+.fatal pre {
+  font-family: var(--hud-mono);
+  font-size: 11px;
+  color: var(--hud-text-dim);
+  max-width: 640px;
+  white-space: pre-wrap;
+  text-align: left;
+  line-height: 1.6;
+}

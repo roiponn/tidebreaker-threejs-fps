@@ -175,10 +175,16 @@ void main() {
   float gradeLum = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );
   color = mix( vec3( gradeLum ), color, uSaturation );
 
-  // Split toning: cool shadows, warm highlights. Balance biases the pivot.
+  // Split toning: cool shadows, warm highlights.
+  // The tone is NORMALISED to unit luminance first, so it shifts hue without
+  // changing brightness. Multiplying by a raw colour (the naive version) both
+  // darkens and tints, which is what turns a dusk scene into a red smear.
   float toneMask = smoothstep( 0.0, 1.0, gradeLum );
   vec3 tone = mix( uSplitShadow, uSplitHighlight, toneMask );
-  color = mix( color, color * tone * 2.0, uSplitBalance * ( 1.0 - abs( gradeLum - 0.5 ) * 1.2 ) );
+  tone /= max( dot( tone, vec3( 0.2126, 0.7152, 0.0722 ) ), 0.0001 );
+  // Strongest in the mid-tones; leaves true blacks and true whites neutral.
+  float toneWeight = uSplitBalance * ( 1.0 - abs( gradeLum * 2.0 - 1.0 ) );
+  color = mix( color, color * tone, clamp( toneWeight, 0.0, 1.0 ) );
 
   // Vignette - optical, so it must not crush shadow detail to pure black.
   vec2 vd = ( vUv - 0.5 ) * vec2( uResolution.x / uResolution.y, 1.0 );

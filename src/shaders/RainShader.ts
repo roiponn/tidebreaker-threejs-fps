@@ -42,7 +42,7 @@ void main() {
   vec3 toCam = uCameraPos - worldCenter;
   toCam.y = 0.0;
   vec3 right = normalize( cross( vec3( 0.0, 1.0, 0.0 ), normalize( toCam ) ) );
-  float stretch = 0.6 + aParams.y * 1.4;
+  float stretch = 0.35 + aParams.y * 0.7;
   vec3 world = worldCenter + right * position.x + vec3( 0.0, position.y * stretch, 0.0 );
 
   vFade = nearFade * aParams.y * step( 0.001, uAmount ) * uAmount;
@@ -62,7 +62,7 @@ void main() {
   // Taper both ends of the streak so it does not read as a hard bar.
   float taper = sin( vUv.y * 3.14159 );
   float across = 1.0 - abs( vUv.x * 2.0 - 1.0 );
-  float alpha = taper * across * vFade * 0.34;
+  float alpha = taper * across * vFade * 0.20;
   gl_FragColor = vec4( uColor, alpha );
 }
 `;

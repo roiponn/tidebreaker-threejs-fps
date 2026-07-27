@@ -56,6 +56,15 @@ export class PlayerCamera {
   /** Multiplier from the debug panel; 0 disables camera shake entirely. */
   shakeScale = 1;
 
+  /**
+   * Additive offsets owned by the intro sequence.
+   * They are applied at compose time and never written back into `yaw`/`pitch`,
+   * so when the intro blends out the player's own aim is exactly where they
+   * left it - accumulating into the aim angles makes the view drift.
+   */
+  introYawOffset = 0;
+  introPitchOffset = 0;
+
   constructor(private readonly visual: MutableVisual) {
     const c = visual.camera;
     this.currentFov = c.fovBase;
@@ -170,8 +179,12 @@ export class PlayerCamera {
     }
 
     // --- compose the transform ---
-    const finalYaw = this.yaw + this.recoilYaw;
-    const finalPitch = clamp(this.pitch + this.recoilPitch, -PLAYER_CONFIG.pitchLimit, PLAYER_CONFIG.pitchLimit);
+    const finalYaw = this.yaw + this.recoilYaw + this.introYawOffset;
+    const finalPitch = clamp(
+      this.pitch + this.recoilPitch + this.introPitchOffset,
+      -PLAYER_CONFIG.pitchLimit,
+      PLAYER_CONFIG.pitchLimit,
+    );
     this.euler.set(finalPitch, finalYaw, shakeRoll + bobRoll);
 
     this.basePosition.copy(eyePosition);

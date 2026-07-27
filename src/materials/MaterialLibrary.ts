@@ -84,7 +84,9 @@ export class MaterialLibrary {
       if (!mat) continue;
       const dry = (mat.userData.dryRoughness as number | undefined) ?? mat.roughness;
       mat.userData.dryRoughness = dry;
-      mat.roughness = THREE.MathUtils.lerp(dry, dry * 0.35, amount);
+      // Floor the wet roughness at 0.32: below that, tiled normal maps at
+      // grazing angles alias into coloured specular fireflies.
+      mat.roughness = Math.max(0.32, THREE.MathUtils.lerp(dry, dry * 0.62, amount));
     }
   }
 
@@ -134,7 +136,7 @@ export class MaterialLibrary {
   // -------------------------------------------------------------------
 
   concrete(): SurfaceMaterial {
-    return this.standard('concrete', this.trackSet(tiled(this.textures.concrete(), 6, 6)), 'concrete', {
+    return this.standard('concrete', this.trackSet(tiled(this.textures.concrete(), 0.9, 0.9)), 'concrete', {
       normalScale: 1.1,
     });
   }
@@ -142,14 +144,14 @@ export class MaterialLibrary {
   concreteWall(): SurfaceMaterial {
     return this.standard(
       'concreteWall',
-      this.trackSet(tiled(this.textures.concrete(23), 3, 2)),
+      this.trackSet(tiled(this.textures.concrete(23), 0.8, 0.8)),
       'concrete',
       { normalScale: 1.25 },
     );
   }
 
   asphalt(): SurfaceMaterial {
-    return this.standard('asphalt', this.trackSet(tiled(this.textures.asphalt(), 8, 8)), 'concrete', {
+    return this.standard('asphalt', this.trackSet(tiled(this.textures.asphalt(), 0.25, 0.25)), 'concrete', {
       normalScale: 0.9,
     });
   }
@@ -159,26 +161,26 @@ export class MaterialLibrary {
     const seeds = { Red: 5, Blue: 15, Green: 25, Rust: 35 };
     return this.standard(
       `container${variant}`,
-      this.trackSet(tiled(this.textures.containerPaint(palette[variant], seeds[variant]), 2, 1)),
+      this.trackSet(tiled(this.textures.containerPaint(palette[variant], seeds[variant]), 0.62, 0.62)),
       'thinMetal',
       { normalScale: 1.15 },
     );
   }
 
   steelPainted(): SurfaceMaterial {
-    return this.standard('steelPainted', this.trackSet(tiled(this.textures.steel(41, true), 2, 2)), 'metal', {
+    return this.standard('steelPainted', this.trackSet(tiled(this.textures.steel(41, true), 1.4, 1.4)), 'metal', {
       normalScale: 1.0,
     });
   }
 
   steelBare(): SurfaceMaterial {
-    return this.standard('steelBare', this.trackSet(tiled(this.textures.steel(53, false), 2, 2)), 'metal', {
+    return this.standard('steelBare', this.trackSet(tiled(this.textures.steel(53, false), 1.4, 1.4)), 'metal', {
       normalScale: 1.0,
     });
   }
 
   tread(): SurfaceMaterial {
-    return this.standard('tread', this.trackSet(tiled(this.textures.treadPlate(), 3, 3)), 'metal', {
+    return this.standard('tread', this.trackSet(tiled(this.textures.treadPlate(), 1.6, 1.6)), 'metal', {
       normalScale: 1.4,
     });
   }
@@ -187,27 +189,27 @@ export class MaterialLibrary {
     const hex = variant === 'Pale' ? 0x8a8f8c : 0x6f5a4a;
     return this.standard(
       `cladding${variant}`,
-      this.trackSet(tiled(this.textures.corrugated(hex, variant === 'Pale' ? 77 : 87), 4, 3)),
+      this.trackSet(tiled(this.textures.corrugated(hex, variant === 'Pale' ? 77 : 87), 0.5, 0.5)),
       'thinMetal',
-      { normalScale: 1.3 },
+      { normalScale: 0.8 },
     );
   }
 
   rubber(): SurfaceMaterial {
-    return this.standard('rubber', this.trackSet(tiled(this.textures.rubber(), 2, 2)), 'wood', {
+    return this.standard('rubber', this.trackSet(tiled(this.textures.rubber(), 2.5, 2.5)), 'wood', {
       normalScale: 1.0,
     });
   }
 
   tarp(): SurfaceMaterial {
-    return this.standard('tarp', this.trackSet(tiled(this.textures.fabric(0x4a4433, 181), 2, 2)), 'wood', {
+    return this.standard('tarp', this.trackSet(tiled(this.textures.fabric(0x4a4433, 181), 1.6, 1.6)), 'wood', {
       side: THREE.DoubleSide,
       normalScale: 1.0,
     });
   }
 
   sandbag(): SurfaceMaterial {
-    return this.standard('sandbag', this.trackSet(tiled(this.textures.fabric(0x6b6047, 191), 1, 1)), 'sand', {
+    return this.standard('sandbag', this.trackSet(tiled(this.textures.fabric(0x6b6047, 191), 3.2, 3.2)), 'sand', {
       normalScale: 1.2,
     });
   }
@@ -323,19 +325,19 @@ export class MaterialLibrary {
   // -------------------------------------------------------------------
 
   gunMetal(): SurfaceMaterial {
-    return this.standard('gunMetal', this.trackSet(tiled(this.textures.gunMetal(), 1.5, 1.5)), 'metal', {
+    return this.standard('gunMetal', this.trackSet(tiled(this.textures.gunMetal(), 16, 16)), 'metal', {
       normalScale: 0.85,
     });
   }
 
   gunPolymer(): SurfaceMaterial {
-    return this.standard('gunPolymer', this.trackSet(tiled(this.textures.gunPolymer(), 2, 2)), 'wood', {
+    return this.standard('gunPolymer', this.trackSet(tiled(this.textures.gunPolymer(), 22, 22)), 'wood', {
       normalScale: 0.9,
     });
   }
 
   gunRubber(): SurfaceMaterial {
-    return this.standard('gunRubber', this.trackSet(tiled(this.textures.rubber(157), 1.5, 1.5)), 'wood', {
+    return this.standard('gunRubber', this.trackSet(tiled(this.textures.rubber(157), 26, 26)), 'wood', {
       normalScale: 1.1,
     });
   }

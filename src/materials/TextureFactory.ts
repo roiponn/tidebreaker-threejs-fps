@@ -183,23 +183,23 @@ export class TextureFactory {
         {
           res,
           height,
-          normalStrength: 2.4,
+          normalStrength: 1.3,
           aoRadius: 3,
-          aoStrength: 2.6,
+          aoStrength: 1.8,
           color: (i, _u, _v, h) => {
             const tone = 0.35 + h * 0.5 + patch[i] * 0.25;
             let c = mixRgb(dark, light, Math.min(1, tone));
             // Water staining pools in the low frequencies.
-            c = mixRgb(c, wet, Math.pow(Math.max(0, stain[i] - 0.42) * 1.7, 1.4) * 0.75);
+            c = mixRgb(c, wet, Math.pow(Math.max(0, stain[i] - 0.52) * 1.5, 1.6) * 0.42);
             // Iron oxide bleeding out of rebar near the strongest stains.
-            c = mixRgb(c, rustBleed, Math.pow(Math.max(0, stain[i] - 0.72) * 3, 2) * 0.5);
+            c = mixRgb(c, rustBleed, Math.pow(Math.max(0, stain[i] - 0.78) * 3, 2) * 0.3);
             c = mixRgb(c, [18, 18, 20], Math.min(1, cracks[i] * 1.4));
             return c;
           },
           roughness: (i, _u, _v, h) => {
             const base = 0.94 - h * 0.14;
             // Wet patches are noticeably smoother -> reads as damp concrete.
-            return Math.max(0.18, base - Math.max(0, stain[i] - 0.45) * 0.9);
+            return Math.max(0.42, base - Math.max(0, stain[i] - 0.5) * 0.6);
           },
           metalness: () => 0.0,
         },
@@ -423,12 +423,11 @@ export class TextureFactory {
         rustMask[i] = Math.min(1, Math.max(0, rust[i] - 0.62) * 2.2 + Math.max(0, drip[i] - 0.66) * 1.9);
       }
 
-      // Vertical ribs: the defining silhouette of industrial cladding.
-      const height = buildField(res, (u) => {
-        const ribs = Math.cos(u * Math.PI * 2 * 16) * 0.5 + 0.5;
-        return Math.pow(ribs, 0.7);
-      });
-      for (let i = 0; i < height.length; i++) height[i] = height[i] * 0.8 + rustMask[i] * 0.18;
+      // NO ribs in the texture: corrugatedPanel() displaces real geometry, and
+      // two rib frequencies at different scales beat into heavy moire. The
+      // texture only carries surface wear.
+      const height = buildField(res, (u, v) => valueNoise2(u * 96, v * 96, 96, seed + 4) * 0.25);
+      for (let i = 0; i < height.length; i++) height[i] = height[i] + rustMask[i] * 0.55;
       scratchField(height, res, 60, seed + 5, { length: 0.2, strength: 0.05 });
       normalizeField(height);
 
@@ -440,11 +439,11 @@ export class TextureFactory {
         {
           res,
           height,
-          normalStrength: 3.0,
+          normalStrength: 1.6,
           aoRadius: 3,
-          aoStrength: 2.8,
+          aoStrength: 2.2,
           color: (i, _u, v, h) => {
-            let c = mixRgb(mixRgb(paint, [30, 30, 32], 0.28), paint, h * 0.7 + 0.3);
+            let c = mixRgb(mixRgb(paint, [30, 30, 32], 0.18), paint, h * 0.4 + 0.6);
             c = mixRgb(c, mixRgb(rustDark, rustLight, rust[i]), rustMask[i]);
             // Ground splash-back darkens the bottom of every wall.
             c = mixRgb(c, [26, 25, 23], Math.max(0, 0.22 - v) * 2.6 * (0.4 + dirt[i]));
@@ -467,8 +466,12 @@ export class TextureFactory {
       const speckle = buildField(res, (u, v) => 1 - worley2(u * 90, v * 90, 90, seed + 21));
 
       const height = new Float32Array(res * res);
-      for (let i = 0; i < height.length; i++) height[i] = tooling[i] * 0.12 + speckle[i] * 0.14;
-      scratchField(height, res, 320, seed + 33, { length: 0.12, strength: 0.14 });
+      for (let i = 0; i < height.length; i++) height[i] = tooling[i] * 0.06 + speckle[i] * 0.05;
+      // Far fewer, far shallower scratches. A dense high-contrast height field
+      // on a 95%-metallic surface produces per-pixel specular chaos rather than
+      // "worn metal" - the normal has to stay close to flat.
+      scratchField(height, res, 90, seed + 33, { length: 0.14, strength: 0.05 });
+      blurField(height, res, 1, 1);
       normalizeField(height);
 
       const anodised = hexToRgb(0x33373b);
@@ -478,19 +481,21 @@ export class TextureFactory {
         {
           res,
           height,
-          normalStrength: 1.5,
+          normalStrength: 0.45,
           aoRadius: 2,
-          aoStrength: 2.0,
+          aoStrength: 1.4,
           color: (i, _u, _v, h) => {
             // Coating rubs off where the field noise peaks -> plausible wear.
-            const worn = Math.max(0, wear[i] - 0.66) * 2.6 + Math.max(0, h - 0.82) * 1.5;
-            return mixRgb(anodised, bare, Math.min(0.85, worn));
+            const worn = Math.max(0, wear[i] - 0.66) * 2.6 + Math.max(0, h - 0.86) * 1.2;
+            return mixRgb(anodised, bare, Math.min(0.7, worn));
           },
+          // Roughness floor of 0.28: a firearm receiver is bead-blasted, not
+          // chromed, and anything shinier aliases badly at view-model distance.
           roughness: (i, _u, _v, h) => {
             const worn = Math.min(1, Math.max(0, wear[i] - 0.66) * 2.6);
-            return Math.max(0.16, 0.46 - worn * 0.24 - h * 0.06);
+            return Math.max(0.28, 0.52 - worn * 0.18 - h * 0.04);
           },
-          metalness: () => 0.95,
+          metalness: () => 0.88,
         },
         this.anisotropy,
       );
@@ -506,20 +511,23 @@ export class TextureFactory {
       const scuff = buildField(res, (u, v) => fbm2(u * 6, v * 6, 6, seed + 13, 3));
 
       const height = new Float32Array(res * res);
-      for (let i = 0; i < height.length; i++) height[i] = stipple[i] * 0.5 + grain[i] * 0.3;
+      for (let i = 0; i < height.length; i++) height[i] = stipple[i] * 0.35 + grain[i] * 0.2;
+      blurField(height, res, 1, 1);
       normalizeField(height);
 
-      const base = hexToRgb(0x3b3d38);
-      const lighter = hexToRgb(0x585b53);
+      const base = hexToRgb(0x2b2d2a);
+      const lighter = hexToRgb(0x3f423c);
 
       return bake(
         {
           res,
           height,
-          normalStrength: 1.8,
+          // Moulded polymer has a fine matte texture, not a rough sponge; a
+          // strong normal here turned the stock into grey foam on screen.
+          normalStrength: 0.6,
           aoRadius: 2,
-          aoStrength: 2.2,
-          color: (i, _u, _v, h) => mixRgb(base, lighter, h * 0.5 + Math.max(0, scuff[i] - 0.6) * 0.8),
+          aoStrength: 1.2,
+          color: (i, _u, _v, h) => mixRgb(base, lighter, h * 0.35 + Math.max(0, scuff[i] - 0.62) * 0.5),
           roughness: (i, _u, _v, h) => 0.78 - h * 0.12 - Math.max(0, scuff[i] - 0.65) * 0.2,
           metalness: () => 0.02,
         },
@@ -552,9 +560,9 @@ export class TextureFactory {
         {
           res,
           height,
-          normalStrength: 3.2,
+          normalStrength: 1.5,
           aoRadius: 2,
-          aoStrength: 3.0,
+          aoStrength: 1.8,
           color: (_i, _u, _v, h) => mixRgb(base, [58, 60, 62], h * 0.5),
           roughness: (_i, _u, _v, h) => 0.92 - h * 0.1,
           metalness: () => 0.0,

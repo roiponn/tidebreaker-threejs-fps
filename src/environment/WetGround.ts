@@ -40,6 +40,7 @@ export class WetGround {
   private enabled = true;
   /** Objects hidden while rendering the mirrored view (ground, VFX, HUD-ish). */
   private hiddenDuringReflection: THREE.Object3D[] = [];
+  private ownedTextures: THREE.Texture[] = [];
 
   constructor(
     materials: MaterialLibrary,
@@ -55,6 +56,24 @@ export class WetGround {
     this.material = base.clone() as THREE.MeshStandardMaterial;
     this.material.name = 'wetApron';
     this.material.userData = { surface: 'concrete' };
+    // The apron is the largest single surface in the scene, so it gets its own
+    // tiling: ~1.4m per tile keeps the aggregate at a believable grain size
+    // without visible repetition at the far end of the berth.
+    for (const map of [this.material.map, this.material.normalMap, this.material.roughnessMap]) {
+      if (!map) continue;
+      const own = map.clone();
+      own.wrapS = own.wrapT = THREE.RepeatWrapping;
+      own.repeat.set(0.7, 0.7);
+      own.needsUpdate = true;
+      if (map === this.material.map) this.material.map = own;
+      else if (map === this.material.normalMap) this.material.normalMap = own;
+      else {
+        this.material.roughnessMap = own;
+        this.material.metalnessMap = own;
+        this.material.aoMap = own;
+      }
+      this.ownedTextures.push(own);
+    }
 
     this.uniforms = {
       uPuddleMask: { value: this.puddleTexture },
@@ -96,11 +115,12 @@ export class WetGround {
     // fog gradient smoothly; the plane itself stays flat.
     const geometry = new THREE.PlaneGeometry(size, size, 32, 32);
     geometry.rotateX(-Math.PI / 2);
-    // World-scale UVs: one texture repeat per 4 metres, everywhere.
+    // Metre UVs, matching applyBoxUv() and corrugatedPanel(). The tile density
+    // is then owned entirely by the texture's own `repeat`, set below.
     const uv = geometry.attributes.uv as THREE.BufferAttribute;
     const pos = geometry.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) {
-      uv.setXY(i, pos.getX(i) / 4, pos.getZ(i) / 4);
+      uv.setXY(i, pos.getX(i), pos.getZ(i));
     }
     uv.needsUpdate = true;
 
@@ -238,6 +258,8 @@ export class WetGround {
   dispose(): void {
     this.mesh.geometry.dispose();
     this.material.dispose();
+    for (const tex of this.ownedTextures) tex.dispose();
+    this.ownedTextures.length = 0;
     this.puddleTexture.dispose();
     this.reflectionRT?.dispose();
   }
@@ -375,7 +397,7 @@ vec2 impactRipple( vec2 world ) {
 `;
 
 const GROUND_MASK = /* glsl */ `
-  vec2 gMaskUv = vGroundWorld.xz * 0.021;
+  vec2 gMaskUv = vGroundWorld.xz * 0.082;
   vec3 gMask = texture2D( uPuddleMask, gMaskUv ).rgb;
   gPuddle = clamp( gMask.r * uWetness * 1.25, 0.0, 1.0 );
   gDamp = clamp( gMask.g * uWetness, 0.0, 1.0 );
@@ -384,8 +406,8 @@ const GROUND_MASK = /* glsl */ `
   vec2 w = vGroundWorld.xz;
   float t = uTime * uRippleSpeed;
   vec2 wave = vec2(
-    sin( w.x * 3.1 + t * 1.7 ) + sin( w.x * 1.3 - w.z * 2.1 + t * 1.1 ),
-    cos( w.z * 2.7 - t * 1.4 ) + sin( w.z * 1.1 + w.x * 1.9 - t * 0.9 )
+    sin( w.x * 3.1 + t * 1.7 ) + sin( w.x * 1.3 - w.y * 2.1 + t * 1.1 ),
+    cos( w.y * 2.7 - t * 1.4 ) + sin( w.y * 1.1 + w.x * 1.9 - t * 0.9 )
   ) * 0.035;
   gRipple = ( wave + rainRipple( w, uRainAmount ) + impactRipple( w ) ) * uRippleStrength * gPuddle;
 `;

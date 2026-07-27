@@ -26,15 +26,25 @@ import { buildRifle, type RifleParts } from './RifleModel';
  */
 export type WeaponState = 'ready' | 'firing' | 'reloading';
 
-const HIP_POSITION = new THREE.Vector3(0.118, -0.108, -0.30);
-const HIP_ROTATION = new THREE.Euler(0.02, 0.11, 0.035);
-// Aligns the optic's sight point with the exact centre of the screen.
-const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.212);
+/**
+ * View-model placement.
+ *
+ * The rifle's local origin is at the pistol grip and its stock extends +0.30
+ * behind that. The root therefore sits only ~12cm in front of the eye, which
+ * puts the butt pad BEHIND the near plane - exactly where a shouldered stock
+ * belongs. Pushing the root further forward (the intuitive thing to do) drags
+ * the whole stock into frame and the weapon reads as a slab lying across the
+ * bottom of the screen instead of a held rifle.
+ */
+const HIP_POSITION = new THREE.Vector3(0.132, -0.148, -0.115);
+const HIP_ROTATION = new THREE.Euler(0.018, 0.075, 0.026);
+/** Aligns the optic's sight point (0, 0.100, -0.052) with the screen centre. */
+const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.16);
 const ADS_ROTATION = new THREE.Euler(0, 0, 0);
-const SPRINT_POSITION = new THREE.Vector3(0.155, -0.175, -0.30);
-const SPRINT_ROTATION = new THREE.Euler(0.30, 0.62, -0.34);
-const RETRACT_POSITION = new THREE.Vector3(0.075, -0.145, -0.14);
-const RETRACT_ROTATION = new THREE.Euler(0.15, 0.85, 0.1);
+const SPRINT_POSITION = new THREE.Vector3(0.175, -0.225, -0.10);
+const SPRINT_ROTATION = new THREE.Euler(0.30, 0.66, -0.36);
+const RETRACT_POSITION = new THREE.Vector3(0.10, -0.20, -0.06);
+const RETRACT_ROTATION = new THREE.Euler(0.16, 0.88, 0.12);
 
 export class WeaponController {
   readonly parts: RifleParts;

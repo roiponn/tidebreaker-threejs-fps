@@ -173,7 +173,7 @@ export class Practicals {
     pivot.position.copy(position);
     this.group.add(pivot);
 
-    const light = new THREE.PointLight(color, p.beaconIntensity, 22, 2);
+    const light = new THREE.PointLight(color, p.beaconIntensity, 24, 2);
     light.layers.enable(LAYER.VIEWMODEL);
     pivot.add(light);
     this.lightCount++;
@@ -227,7 +227,7 @@ export class Practicals {
     bulb.layers.set(LAYER.WORLD);
     group.add(bulb);
 
-    const light = new THREE.PointLight(color, 11, 14, 2);
+    const light = new THREE.PointLight(color, 65, 16, 2);
     light.position.y = -cordLength - 0.14;
     light.layers.enable(LAYER.VIEWMODEL);
     group.add(light);
@@ -258,7 +258,7 @@ export class Practicals {
     this.group.add(mesh);
     this.disposables.push(geo);
 
-    const light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 11, 2);
+    const light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
     light.position.copy(position).add(new THREE.Vector3(0, -0.15, 0));
     light.layers.enable(LAYER.VIEWMODEL);
     this.group.add(light);

@@ -87,11 +87,13 @@ void main() {
 
   // --- sun disc + glow ---
   float sunDot = max( dot( dir, normalize( uSunDirection ) ), 0.0 );
-  float glow = pow( sunDot, uSunGlowPower * 0.02 ) * 0.55;
-  float wideGlow = pow( sunDot, 2.2 ) * 0.35;
+  float glow = pow( sunDot, max( uSunGlowPower * 0.02, 1.0 ) ) * 0.42;
+  // Tighter than before: the old exponent washed warm light across a
+  // third of the dome and flattened the whole gradient.
+  float wideGlow = pow( sunDot, 5.5 ) * 0.22;
   float disc = smoothstep( 0.9986, 0.9993, sunDot );
   sky += uSunColor * ( glow + wideGlow );
-  sky += uSunColor * disc * 14.0;
+  sky += uSunColor * disc * 5.0;
 
   // --- clouds ---
   // Project onto a plane above the viewer so clouds converge at the horizon.
@@ -110,10 +112,12 @@ void main() {
   float lit = fbm( cloudUv * 0.55 + drift + sunOffset );
   float shading = clamp( ( lit - low ) * 3.0 + 0.5, 0.0, 1.0 );
 
-  vec3 cloudDark = mix( uZenith * 0.55, uHorizon * 0.35, horizonBlend );
-  vec3 cloudLit = mix( uSunColor * 0.9, vec3( 1.0 ), 0.15 ) * ( 0.35 + sunDot * 0.9 );
-  vec3 cloudColor = mix( cloudDark, cloudLit, shading * ( 0.35 + sunDot * 0.65 ) );
-  sky = mix( sky, cloudColor, density * 0.88 );
+  // Cloud base stays cool; only the sun-facing side warms up. Lighting the
+  // whole deck with the sun colour is what turns a dusk sky into flat maroon.
+  vec3 cloudDark = mix( uZenith * 0.85, uHorizon * 0.30, horizonBlend ) + vec3( 0.006, 0.010, 0.018 );
+  vec3 cloudLit = mix( uSunColor, vec3( 0.72, 0.78, 0.9 ), 1.0 - sunDot ) * ( 0.22 + sunDot * 0.85 );
+  vec3 cloudColor = mix( cloudDark, cloudLit, shading * ( 0.22 + sunDot * 0.78 ) );
+  sky = mix( sky, cloudColor, density * 0.82 );
 
   // --- stars, only in the gaps and only once it is dark enough ---
   if ( uNight > 0.01 && h > 0.0 ) {

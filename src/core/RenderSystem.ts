@@ -152,7 +152,7 @@ export class RenderSystem {
         uTexel: { value: new THREE.Vector2() },
         uThreshold: { value: 0.9 },
         uSoftKnee: { value: 0.6 },
-        uClamp: { value: 22 },
+        uClamp: { value: 8 },
       },
     });
 
@@ -387,14 +387,13 @@ export class RenderSystem {
     this.cssHeight = cssHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, this.quality.maxPixelRatio);
     const scale = dpr * this.quality.renderScale;
+    // setSize(..., false) writes the backing-store size without touching CSS,
+    // so the canvas keeps its stylesheet-driven 100%x100% layout box and
+    // renderScale is honoured independently of the layout.
     this.renderer.setPixelRatio(1);
-    this.renderer.setSize(cssWidth, cssHeight, false);
-    // We drive the backing-store size ourselves so renderScale is honoured.
     const w = Math.max(2, Math.round(cssWidth * scale));
     const h = Math.max(2, Math.round(cssHeight * scale));
     this.renderer.setSize(w, h, false);
-    this.renderer.domElement.style.width = `${cssWidth}px`;
-    this.renderer.domElement.style.height = `${cssHeight}px`;
     this.buildTargets(w, h);
   }
 
@@ -417,6 +416,11 @@ export class RenderSystem {
   setFade(amount: number, color = 0x000000): void {
     this.fadeAmount = clamp01(amount);
     this.fadeColor.setHex(color);
+  }
+
+  /** Depth texture written by the world pass; consumed by soft particles. */
+  get depthTexture(): THREE.DepthTexture | null {
+    return (this.sceneRT?.depthTexture as THREE.DepthTexture) ?? null;
   }
 
   get drawCalls(): number {

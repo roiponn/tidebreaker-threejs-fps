@@ -29,7 +29,7 @@ export const VISUAL_CONFIG = {
 
   exposure: {
     /** ACES-filmic exposure multiplier applied in the composite pass. */
-    base: 1.06,
+    base: 1.35,
     /** Eye adaptation speed (units/sec) - deliberately slow and subtle. */
     adaptionSpeed: 0.55,
     /** How far auto-exposure is allowed to drift from `base`. */
@@ -39,15 +39,15 @@ export const VISUAL_CONFIG = {
   /** Dusk-to-night sky. `timeOfDay` 0 = late dusk, 1 = deep night. */
   sky: {
     timeOfDay: 0.34,
-    zenithDay: 0x1b3a5c,
+    zenithDay: 0x0f2740,
     zenithNight: 0x070c18,
-    horizonDay: 0xff8b4a,
+    horizonDay: 0xd06a34,
     horizonNight: 0x2a2f45,
     groundHaze: 0x151a24,
     /** Angular size / softness of the sun disc glow on the sky dome. */
-    sunGlowPower: 220,
+    sunGlowPower: 620,
     starIntensity: 0.55,
-    cloudCoverage: 0.62,
+    cloudCoverage: 0.6,
     cloudSpeed: 0.0035,
   },
 
@@ -55,9 +55,9 @@ export const VISUAL_CONFIG = {
     /** Azimuth/elevation in degrees. Low sun = long, readable shadows. */
     azimuth: 108,
     elevation: 3.4,
-    colorDay: 0xffb070,
+    colorDay: 0xffc08a,
     colorNight: 0x4a6ea8,
-    intensityDay: 3.1,
+    intensityDay: 2.6,
     intensityNight: 0.28,
     shadowMapSize: 2048,
     shadowBias: -0.0008,
@@ -69,23 +69,23 @@ export const VISUAL_CONFIG = {
 
   ambient: {
     /** Hemisphere fill so shadowed areas keep readable information. */
-    skyColor: 0x3d5a7a,
-    groundColor: 0x1a1610,
-    intensity: 0.85,
+    skyColor: 0x5580ad,
+    groundColor: 0x241d16,
+    intensity: 1.15,
     /** Strength of the PMREM environment probe on all PBR materials. */
-    envIntensity: 0.9,
+    envIntensity: 1.05,
   },
 
   fog: {
-    color: 0x2a3243,
+    color: 0x2b3852,
     /** Exponential-squared density; the harbour reads best around 0.012. */
-    density: 0.0125,
+    density: 0.0138,
     /** Extra near-ground mist layer height (metres). */
     mistHeight: 3.2,
     mistDensity: 0.55,
     /** Aerial perspective tint applied to distant geometry. */
-    aerialColor: 0x4a5f7d,
-    aerialStrength: 0.55,
+    aerialColor: 0x54708f,
+    aerialStrength: 0.45,
   },
 
   /** Wet-ground / puddle system. */
@@ -98,7 +98,7 @@ export const VISUAL_CONFIG = {
     rippleSpeed: 1.1,
     rippleStrength: 0.35,
     /** Light drizzle left over from the storm. 0 disables the rain system. */
-    rainAmount: 0.28,
+    rainAmount: 0.22,
   },
 
   bloom: {
@@ -111,16 +111,16 @@ export const VISUAL_CONFIG = {
   grade: {
     /** Lift / gamma / gain style trim applied after tonemapping. */
     liftShadows: 0x0c1420,
-    gainHighlights: 0xfff2e2,
+    gainHighlights: 0xfffbf6,
     contrast: 1.09,
-    saturation: 1.05,
+    saturation: 1.12,
     /** Teal shadows / amber highlights split-tone, kept restrained. */
-    splitToneShadow: 0x1d3a4d,
+    splitToneShadow: 0x1a4258,
     splitToneHighlight: 0xffc48a,
-    splitToneBalance: 0.28,
-    vignette: 0.36,
+    splitToneBalance: 0.22,
+    vignette: 0.26,
     vignetteSoftness: 0.55,
-    grain: 0.028,
+    grain: 0.014,
     chromaticAberration: 0.0016,
   },
 
@@ -153,23 +153,23 @@ export const VISUAL_CONFIG = {
   /** Practical lights placed in the level (floodlights, beacons, strips). */
   practicals: {
     floodColor: 0xffd9a8,
-    floodIntensity: 46,
+    floodIntensity: 520,
     floodDistance: 38,
     floodAngle: 0.52,
     floodPenumbra: 0.45,
     /** Volumetric cone mesh opacity - fakes light shafts cheaply. */
-    shaftOpacity: 0.055,
+    shaftOpacity: 0.115,
     beaconColor: 0xff5a2a,
-    beaconIntensity: 14,
+    beaconIntensity: 90,
     beaconSpeed: 1.9,
     stripColor: 0x9fd8ff,
-    stripIntensity: 3.2,
+    stripIntensity: 26,
     /** Chance per second that a failing lamp flickers. */
     flickerRate: 0.9,
   },
 
   muzzle: {
-    lightIntensity: 260,
+    lightIntensity: 900,
     lightDistance: 26,
     /** Flash lifetime in seconds - 2 frames at 60fps reads as "snappy". */
     lightDuration: 0.045,
@@ -177,7 +177,7 @@ export const VISUAL_CONFIG = {
   },
 
   explosion: {
-    lightIntensity: 1400,
+    lightIntensity: 5200,
     lightDistance: 62,
     lightDuration: 0.55,
     radius: 7.5,

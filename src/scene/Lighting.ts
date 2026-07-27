@@ -98,7 +98,7 @@ export class Lighting {
     (sharedFogUniforms.uFogSunDir.value as THREE.Vector3).copy(this.sky.sunDirection);
     (sharedFogUniforms.uFogSunColor.value as THREE.Color).copy(this.sky.sunColor);
     // Sun scatter fades as night falls, otherwise the fog glows for no reason.
-    sharedFogUniforms.uFogSunStrength.value = THREE.MathUtils.lerp(0.55, 0.06, t);
+    sharedFogUniforms.uFogSunStrength.value = THREE.MathUtils.lerp(0.18, 0.04, t);
 
     this.scene.background = null;
   }

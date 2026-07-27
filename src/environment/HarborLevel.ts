@@ -58,7 +58,8 @@ export class HarborLevel {
   readonly distant: DistantScenery;
 
   readonly playerSpawn = new THREE.Vector3(-1.5, 0, 0.5);
-  readonly playerSpawnYaw = Math.PI / 2;
+  /** forward = (-sin(yaw), 0, -cos(yaw)); -PI/2 looks down +X, toward the pier. */
+  readonly playerSpawnYaw = -Math.PI / 2;
   readonly extractionPoint = new THREE.Vector3(53, 0, -2);
   readonly enemySpawns: EnemySpawn[] = [];
   readonly explosivePositions: THREE.Vector3[] = [];

@@ -113,6 +113,18 @@ export function corrugatedPanel(
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
+
+  // WORLD-SCALE UVs, in metres - the same convention applyBoxUv() uses.
+  // PlaneGeometry's default 0..1 UVs would stretch one texture tile across the
+  // whole panel, so a 12m container wall would show a single enormous rust
+  // blotch. With metre UVs, `texture.repeat` means "tiles per metre" for every
+  // surface in the project, which is the only way the material scale stays
+  // consistent between a crate and a warehouse wall.
+  const uv = geo.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, pos.getX(i), pos.getY(i));
+  }
+  uv.needsUpdate = true;
   return geo;
 }
 

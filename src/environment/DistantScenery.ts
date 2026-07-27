@@ -92,9 +92,9 @@ export class DistantScenery {
   vec2 p = vSeaWorld.xz;
   float t = uTime;
   vec2 n = vec2( 0.0 );
-  n += vec2( cos( p.x * 0.9 + t * 1.4 ), cos( p.z * 0.8 - t * 1.1 ) ) * 0.05;
-  n += vec2( cos( p.x * 2.3 - p.z * 1.1 + t * 2.1 ), cos( p.z * 2.7 + p.x * 0.7 - t * 1.7 ) ) * 0.022;
-  n += vec2( cos( p.x * 6.1 + t * 3.4 ), cos( p.z * 5.7 - t * 3.1 ) ) * 0.008;
+  n += vec2( cos( p.x * 0.9 + t * 1.4 ), cos( p.y * 0.8 - t * 1.1 ) ) * 0.05;
+  n += vec2( cos( p.x * 2.3 - p.y * 1.1 + t * 2.1 ), cos( p.y * 2.7 + p.x * 0.7 - t * 1.7 ) ) * 0.022;
+  n += vec2( cos( p.x * 6.1 + t * 3.4 ), cos( p.y * 5.7 - t * 3.1 ) ) * 0.008;
   vec3 waveNormal = normalize( vec3( -n.x, 1.0, -n.y ) );
   normal = normalize( ( viewMatrix * vec4( waveNormal, 0.0 ) ).xyz );
 }`,
