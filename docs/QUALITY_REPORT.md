@@ -22,6 +22,9 @@ Being explicit, because the brief forbids claiming unverified work:
 | Explosion light falls off with distance; sky not brightened | **Verified** — `?boomhold=` captures at life 0.08 / 0.30 / 0.75 |
 | Repeated explosions do not accumulate lights, particles or emissive state | **Verified** — 10 consecutive detonations sampled; lights 17→18→17, particles peak ~90 and drain to 0, blast light resets to 0 |
 | Enemy secondary motion (torso twist, pelvis, lean, recoil, hit reactions) | **Implemented and inspected in still frames at 2/4/8/15/30 m.** *Motion* was sampled at roughly 4 fps in this browser, not watched at frame rate — see §4.6 |
+| Pass-3 frames from three gameplay camera positions | **NOT done** — the briefing phase would not advance in this browser, so all pass-3 frames are from spawn. See §4.3 |
+| Clean production build, fresh session, no console errors | **Verified** — `vite build` clean, chain test re-run on the built bundle, console shows only Vite messages |
+| Draw-call / triangle / light cost of the enemy motion work | **Verified** — 638 / 301,643 / 17 identical before and after, same viewpoint |
 | Chain reactions between drums | **Verified** — deterministic harness, 5 runs across two clusters, dev and production builds (see P9) |
 | Player death and mission completion | **NOT verified** — the loop is implemented; a full kill-to-extraction run was not played |
 | No console errors or warnings | **Verified** — a fresh tab logs only Vite's connection messages |
@@ -417,6 +420,14 @@ Stated plainly rather than papered over:
 3. **Pointer lock is refused in this browser**, so the game had to be driven with synthetic
    events. Sustained play — enemy return fire, taking damage, dying, completing the mission — was
    not exercised end to end.
+
+   In this pass the briefing phase would not advance at all: neither a synthetic click nor a real
+   one moved `data-phase` off `briefing`, so the player never moved. **Every frame in this pass was
+   therefore captured from the spawn position**, varying only what happens in front of it (the
+   pose-test subjects, the blast, the light's life fraction) and the small displacement of camera
+   shake. I am *not* claiming three gameplay-relevant camera positions for pass 3 — I could not
+   reach them. The pass-2 captures from other positions remain valid but are not evidence for these
+   changes.
 
 4. **No reference images were provided**, so no comparison was performed. Section 3 is a
    self-assessment from genre memory and is explicitly not a blind comparison.
