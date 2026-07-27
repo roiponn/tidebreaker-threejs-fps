@@ -8,7 +8,8 @@
       "Bash(python3 -)",
       "Bash(npx tsc *)",
       "Bash(git add *)",
-      "Bash(git commit -q -m 'feat\\(level\\): BERTH 7 harbour - layout, props, practicals, wet ground, distant scenery *)"
+      "Bash(git commit -q -m 'feat\\(level\\): BERTH 7 harbour - layout, props, practicals, wet ground, distant scenery *)",
+      "Bash(git commit -q -m 'feat\\(player,weapon\\): FPS controller, layered view camera and the MK-7 VESPER *)"
     ]
   }
 }
