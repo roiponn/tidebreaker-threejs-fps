@@ -171,8 +171,24 @@ export function buildRifle(mats: MaterialLibrary): RifleParts {
   // Optic: housing, hood, glass, and an emissive reticle
   // ==================================================================
   add(metalParts, keep(chamferBox(0.044, 0.020, 0.086, 0.004, 2)), trs(0, 0.076, -0.052));
-  add(metalParts, keep(chamferBox(0.048, 0.052, 0.010, 0.004, 2)), trs(0, 0.100, -0.092));
-  add(metalParts, keep(chamferBox(0.048, 0.052, 0.010, 0.004, 2)), trs(0, 0.100, -0.014));
+  // Hood end plates, built as FRAMES around an aperture.
+  //
+  // These were solid slabs, which made the optic a closed box: aiming down the
+  // sight put an opaque block over the screen centre and neither the glass nor
+  // the reticle behind it could be seen. A sight you cannot see through is not
+  // a sight. Four thin bars per end leave a 32 x 36mm opening, which is what
+  // the 38 x 40mm glass sits behind.
+  const hoodH = keep(chamferBox(0.048, 0.008, 0.010, 0.003, 1));
+  const hoodV = keep(chamferBox(0.008, 0.036, 0.010, 0.003, 1));
+  // Matte polymer, not metal: a bare-metal frame throws a specular highlight
+  // straight into the middle of the sight picture. Real optic hoods are
+  // deliberately non-reflective for exactly this reason.
+  for (const z of [-0.092, -0.014]) {
+    add(polymerParts, hoodH, trs(0, 0.122, z));
+    add(polymerParts, hoodH, trs(0, 0.078, z));
+    add(polymerParts, hoodV, trs(-0.020, 0.100, z));
+    add(polymerParts, hoodV, trs(0.020, 0.100, z));
+  }
   add(metalParts, keep(chamferBox(0.010, 0.050, 0.082, 0.003, 1)), trs(-0.021, 0.100, -0.052));
   add(metalParts, keep(chamferBox(0.010, 0.050, 0.082, 0.003, 1)), trs(0.021, 0.100, -0.052));
   // Adjustment turrets - small, but they break the housing's flat top.

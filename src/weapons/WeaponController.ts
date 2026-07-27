@@ -61,15 +61,34 @@ const HIP_POSITION = new THREE.Vector3(0.196, -0.178, -0.500);
 const HIP_ROTATION = new THREE.Euler(0.052, 0.150, 0.026);
 /**
  * Aligns the optic's sight point (0, 0.100, -0.052) with the screen centre.
- * y must stay at -0.100 for that to hold; z is free and sets how large the
- * optic reads.
+ * y must stay at -0.100 for that to hold.
+ *
+ * z is NOT free. The stock extends +0.302 behind the grip, so any z greater
+ * than -0.302 puts the butt pad in front of the eye - and at ADS the weapon is
+ * centred, so a visible butt pad is a slab across the bottom half of the
+ * screen rather than something tucked into a corner. At -0.16 the butt sits
+ * 14cm behind the camera and is clipped away, which is where a shouldered
+ * stock belongs.
  */
-const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.30);
+const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.16);
 const ADS_ROTATION = new THREE.Euler(0, 0, 0);
-const SPRINT_POSITION = new THREE.Vector3(0.265, -0.285, -0.470);
-const SPRINT_ROTATION = new THREE.Euler(0.30, 0.66, -0.36);
-const RETRACT_POSITION = new THREE.Vector3(0.175, -0.270, -0.420);
-const RETRACT_ROTATION = new THREE.Euler(0.16, 0.88, 0.12);
+/**
+ * Sprint and wall-retract are POSE OFFSETS, not poses of their own.
+ *
+ * They used to yaw the weapon 38 deg and 50 deg respectively. In a container
+ * canyon the wall probe is partially engaged almost continuously - every time
+ * the player looks at a wall, at the deck while walking, or at an enemy within
+ * the probe distance - so the rifle was being swung through most of a right
+ * angle and back as a matter of course. That reads as the weapon spinning,
+ * not as weapon handling.
+ *
+ * Both are now small: enough to say "the weapon is lowered" without the barrel
+ * ever leaving the corner of the screen it lives in.
+ */
+const SPRINT_POSITION = new THREE.Vector3(0.235, -0.250, -0.480);
+const SPRINT_ROTATION = new THREE.Euler(0.135, 0.255, -0.115);
+const RETRACT_POSITION = new THREE.Vector3(0.190, -0.232, -0.430);
+const RETRACT_ROTATION = new THREE.Euler(0.075, 0.235, 0.055);
 
 export class WeaponController {
   readonly parts: RifleParts;
@@ -174,7 +193,10 @@ export class WeaponController {
     lookDeltaY: number,
   ): void {
     const canAds = this.state !== 'reloading' && !sprinting;
-    const adsTarget = wantsAds && canAds ? 1 : 0;
+    // ?weaponpose=ads must drive the real blend, not just the pose: the FOV,
+    // the reticle brightness and the sway suppression all key off adsBlend, so
+    // pinning only the pose would show a pose nobody ever sees.
+    const adsTarget = (wantsAds || this.debugPose === 'ads') && canAds ? 1 : 0;
     const previousAds = this.adsBlend > 0.5;
     // ADS uses a fixed-time approach rather than a damp so the transition
     // duration is exactly WEAPON_CONFIG.adsTime and can be tuned to the audio.
@@ -339,7 +361,7 @@ export class WeaponController {
     // whole screen during a 2.4-second animation the player must fight through.
     const swing = Math.sin(t * Math.PI);
     this.reloadPos.set(-0.015 * swing, -0.035 * swing, -0.02 * swing);
-    this.reloadRot.set(0.16 * swing, 0.26 * swing, -0.30 * swing);
+    this.reloadRot.set(0.10 * swing, 0.15 * swing, -0.17 * swing);
 
     // Empty reload: charging handle is racked at the end.
     if (this.reloadWasEmpty && t > 0.84 && this.boltVelocity === 0 && this.boltOffset < 0.001) {
@@ -370,9 +392,12 @@ export class WeaponController {
     const rate = WEAPON_CONFIG.swaySmoothing;
     this.swayPos.x = damp(this.swayPos.x, targetX, rate, dt);
     this.swayPos.y = damp(this.swayPos.y, targetY, rate, dt);
-    this.swayRot.y = damp(this.swayRot.y, targetX * WEAPON_CONFIG.swayRotation * 22, rate, dt);
-    this.swayRot.x = damp(this.swayRot.x, -targetY * WEAPON_CONFIG.swayRotation * 22, rate, dt);
-    this.swayRot.z = damp(this.swayRot.z, targetX * WEAPON_CONFIG.swayRotation * 14, rate * 0.8, dt);
+    // Rotational sway is halved relative to positional: a rifle that yaws with
+    // every mouse movement reads as loose in the hands rather than heavy. Peak
+    // excursion here is about 3 deg.
+    this.swayRot.y = damp(this.swayRot.y, targetX * WEAPON_CONFIG.swayRotation * 11, rate, dt);
+    this.swayRot.x = damp(this.swayRot.x, -targetY * WEAPON_CONFIG.swayRotation * 11, rate, dt);
+    this.swayRot.z = damp(this.swayRot.z, targetX * WEAPON_CONFIG.swayRotation * 7, rate * 0.8, dt);
   }
 
   private updateBob(dt: number, moveSpeed: number, grounded: boolean): void {
@@ -453,11 +478,23 @@ export class WeaponController {
     this.parts.reticleMaterial.opacity = lerp(0.55, 1, this.adsBlend);
   }
 
+  /**
+   * Debug only (?weaponpose=). Pins one pose blend to 1 so its extreme can be
+   * captured. The poses that swing the weapon furthest are exactly the ones
+   * that only occur transiently in play, which is why they went unchecked.
+   */
+  debugPose: 'hip' | 'ads' | 'sprint' | 'retract' | null = null;
+
   /** Sums every animation layer into the final transform. */
   private composePose(): void {
-    const ads = this.adsBlend;
-    const sprint = this.sprintBlend;
-    const retract = this.retractBlend;
+    let ads = this.adsBlend;
+    let sprint = this.sprintBlend;
+    let retract = this.retractBlend;
+    if (this.debugPose) {
+      ads = this.debugPose === 'ads' ? 1 : 0;
+      sprint = this.debugPose === 'sprint' ? 1 : 0;
+      retract = this.debugPose === 'retract' ? 1 : 0;
+    }
 
     // Base pose: hip -> ADS -> sprint -> retract, each overriding the last.
     this.tmpPos.copy(HIP_POSITION).lerp(ADS_POSITION, ads);

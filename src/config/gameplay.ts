@@ -92,8 +92,14 @@ export const WEAPON_CONFIG = {
   bobWalk: 0.0125,
   bobSprint: 0.026,
   bobFrequency: 8.4,
-  /** How far the weapon retracts when the muzzle nears a wall. */
-  wallProbeDistance: 1.35,
+  /**
+   * How far the weapon retracts when the muzzle nears a wall.
+   *
+   * This must sit just beyond the muzzle (~0.96m from the eye) and no further.
+   * At 1.35m the probe was engaging on the deck whenever the player looked
+   * down while walking, so the retract pose was blended in almost constantly.
+   */
+  wallProbeDistance: 1.05,
   wallRetract: 0.24,
 
   /** Heat haze / barrel glow builds with sustained fire. */

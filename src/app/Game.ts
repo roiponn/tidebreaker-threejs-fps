@@ -242,6 +242,13 @@ export class Game {
       // as it does at speed - it just holds long enough to be screenshotted.
       // (Particles keep their own timing, so only the LIGHT is meaningful in
       // a slowed capture.)
+      // ?weaponpose=hip|ads|sprint|retract pins the view-model pose so each
+      // extreme can be inspected. Sprint and wall-retract only occur
+      // transiently in play, which is how their rotations went unchecked.
+      const pose = params.get('weaponpose');
+      if (pose === 'hip' || pose === 'ads' || pose === 'sprint' || pose === 'retract') {
+        this.weapon.debugPose = pose;
+      }
       // ?boomhold=L pins the blast light at life fraction L (0 = ignition,
       // 0.08 = peak, 1 = extinguished) so each point on the curve can be
       // screenshotted without racing a sub-second event.

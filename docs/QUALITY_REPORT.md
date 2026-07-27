@@ -380,6 +380,49 @@ Not verified: ADS and firing poses. The briefing phase will not advance in this 
 weapon could only be inspected in its hip pose. The ADS alignment is correct by construction (the
 optic's sight point lands on the view axis) but has not been seen.
 
+### P14 — The weapon swung through most of a right angle in play (FIXED)
+
+Reported from a second player recording. The static hip pose from P13 was correct; what moved was
+the pose blending on top of it. Three layers rotated the weapon, and one of them had been made much
+worse by P13 itself:
+
+| Layer | Was | Now |
+| --- | --- | --- |
+| Wall retract | 50° yaw, probe 1.35 m | 13° yaw, probe 1.05 m |
+| Sprint | 38° yaw, 17° pitch, −21° roll | 15° / 8° / −7° |
+| Look sway | ±5.9° yaw and pitch, ±3.8° roll | ±3° / ±3° / ±1.9° |
+| Reload body swing | 9° / 15° / −17° | 6° / 9° / −10° |
+
+The wall retract was the main offender. The probe is a ray from the eye along the aim, and P13 moved
+the muzzle from 0.56 m to 0.96 m in front of the camera — so a 1.35 m probe now fired constantly:
+at containers in a canyon barely wider than that, at the deck whenever the player looked down while
+walking, and at any enemy inside the probe range. The pose was partially blended in almost all the
+time, so the rifle was being swung through most of a right angle and back as a matter of course.
+
+`?weaponpose=hip|ads|sprint|retract` was added to pin each blend, because these poses only occur
+transiently in play and that is exactly how their magnitudes went unchecked for three passes.
+`weaponpose=ads` drives the real `adsBlend`, not just the pose, so the FOV, reticle brightness and
+sway suppression are all faithful — pinning only the pose would show a state nobody ever sees.
+
+### P15 — The optic was a closed box (FIXED)
+
+Found immediately by the new ADS pin, and it had been there since the weapon was built. The sight's
+hood was two solid 48×52 mm plates, so aiming down the sight put an opaque block over the centre of
+the screen: neither the glass nor the emissive reticle behind it could be seen. **ADS was
+unusable.** The plates are now four thin bars each, leaving a 32×36 mm aperture, and they use the
+matte polymer material rather than bare metal — a metal frame threw a specular highlight straight
+into the middle of the sight picture.
+
+`ADS_POSITION.z` also had to go back to −0.16. P13 had pushed it to −0.30, which put the butt pad
+(stock +0.302 behind the grip) level with the eye; at ADS the weapon is centred, so that read as a
+slab across the bottom half of the screen instead of something tucked into a corner.
+
+Cost: +8 boxes, merged into the existing view-model batches. Draw calls unchanged.
+
+**Still open:** the emissive reticle is not clearly visible through the aperture in the captures.
+The sight picture is usable — a hostile at 15 m is plainly visible through it — but the red dot does
+not read. Not chased further; it is a small, self-contained follow-up.
+
 ### P12 — Enemy rigid-part appearance (IMPROVED, not eliminated)
 
 See §5.
