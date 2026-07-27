@@ -29,21 +29,46 @@ export type WeaponState = 'ready' | 'firing' | 'reloading';
 /**
  * View-model placement.
  *
- * The rifle's local origin is at the pistol grip and its stock extends +0.30
- * behind that. The root therefore sits only ~12cm in front of the eye, which
- * puts the butt pad BEHIND the near plane - exactly where a shouldered stock
- * belongs. Pushing the root further forward (the intuitive thing to do) drags
- * the whole stock into frame and the weapon reads as a slab lying across the
- * bottom of the screen instead of a held rifle.
+ * The rifle's local origin is at the pistol grip; the stock extends +0.30
+ * behind it and the muzzle reaches -0.44 in front.
+ *
+ * THE FORWARD OFFSET IS THE LOAD-BEARING NUMBER. These offsets are read by the
+ * eye as ANGLES, and the angle to a point 13cm to the right depends entirely
+ * on how far forward it is. At the original z of -0.115 the grip sat 49° off
+ * the view axis while the muzzle sat at 13° - so the rifle fanned diagonally
+ * across the frame instead of pointing into it, and how much of that fan was
+ * visible depended on the window shape. It only ever looked acceptable in a
+ * tall window, which cropped the near end away entirely.
+ *
+ * Distance also sets apparent SIZE, and the two have to be solved together:
+ * scaling x and y with z holds the weapon at the same screen angles while
+ * moving it further away, which is the only knob that shrinks its footprint
+ * without moving it. The rifle is 0.29m tall; at the original 0.12m it
+ * subtended more than the whole frame height, which is the other half of why
+ * it looked like a slab rather than a weapon.
+ *
+ * At z = -0.50 the grip sits ~21° off axis and ~20° low, the muzzle ~12°/11°,
+ * and the rifle's height covers about half the frame - normal hip-fire
+ * framing. These are screen-composition numbers, not anatomical ones: a
+ * view-model is posed for the camera, not for a shoulder.
  */
-const HIP_POSITION = new THREE.Vector3(0.132, -0.148, -0.115);
-const HIP_ROTATION = new THREE.Euler(0.018, 0.075, 0.026);
-/** Aligns the optic's sight point (0, 0.100, -0.052) with the screen centre. */
-const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.16);
+const HIP_POSITION = new THREE.Vector3(0.196, -0.178, -0.500);
+/**
+ * Yaw swings the stock toward +X and the muzzle toward the centre, which is
+ * how the butt is kept out of frame now that it is no longer hidden behind the
+ * near plane. Pitch drops it out of the bottom for the same reason.
+ */
+const HIP_ROTATION = new THREE.Euler(0.052, 0.150, 0.026);
+/**
+ * Aligns the optic's sight point (0, 0.100, -0.052) with the screen centre.
+ * y must stay at -0.100 for that to hold; z is free and sets how large the
+ * optic reads.
+ */
+const ADS_POSITION = new THREE.Vector3(0, -0.1005, -0.30);
 const ADS_ROTATION = new THREE.Euler(0, 0, 0);
-const SPRINT_POSITION = new THREE.Vector3(0.175, -0.225, -0.10);
+const SPRINT_POSITION = new THREE.Vector3(0.265, -0.285, -0.470);
 const SPRINT_ROTATION = new THREE.Euler(0.30, 0.66, -0.36);
-const RETRACT_POSITION = new THREE.Vector3(0.10, -0.20, -0.06);
+const RETRACT_POSITION = new THREE.Vector3(0.175, -0.270, -0.420);
 const RETRACT_ROTATION = new THREE.Euler(0.16, 0.88, 0.12);
 
 export class WeaponController {

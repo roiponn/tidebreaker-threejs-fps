@@ -64,6 +64,7 @@ export class PlayerCamera {
    */
   introYawOffset = 0;
   introPitchOffset = 0;
+  private aspect = 1;
 
   constructor(private readonly visual: MutableVisual) {
     const c = visual.camera;
@@ -78,6 +79,31 @@ export class PlayerCamera {
     this.camera.aspect = aspect;
     this.weaponCamera.aspect = aspect;
     this.camera.updateProjectionMatrix();
+    this.aspect = aspect;
+    this.applyWeaponFov();
+  }
+
+  /**
+   * The view-model camera is locked to a HORIZONTAL field of view.
+   *
+   * three's `fov` is vertical, so a vertical-locked view-model camera changes
+   * its horizontal coverage with the window shape - and the view-model is
+   * placed off to one side, close to the eye, which is exactly where that
+   * matters most. At a tall window the rifle falls outside the frustum and
+   * only a sliver shows; at a wide one the same rifle fans right across the
+   * frame. Locking the horizontal angle makes the weapon occupy the same
+   * fraction of the screen width at every aspect, which is the only way the
+   * placement constants below can mean anything.
+   *
+   * `weaponFov` / `weaponFovAds` are therefore HORIZONTAL degrees.
+   */
+  private applyWeaponFov(): void {
+    const c = this.visual.camera;
+    const horizontal = lerp(c.weaponFov, c.weaponFovAds, this.adsBlend);
+    const halfH = THREE.MathUtils.degToRad(horizontal) * 0.5;
+    const vertical = 2 * Math.atan(Math.tan(halfH) / Math.max(this.aspect, 0.2));
+    // Cap it so a very tall window cannot produce a fisheye view-model.
+    this.weaponCamera.fov = Math.min(THREE.MathUtils.radToDeg(vertical), 76);
     this.weaponCamera.updateProjectionMatrix();
   }
 
@@ -174,9 +200,10 @@ export class PlayerCamera {
     if (Math.abs(this.camera.fov - this.currentFov) > 0.01) {
       this.camera.fov = this.currentFov;
       this.camera.updateProjectionMatrix();
-      this.weaponCamera.fov = lerp(c.weaponFov, c.weaponFovAds, this.adsBlend);
-      this.weaponCamera.updateProjectionMatrix();
     }
+    // Independently of the world camera: the ADS blend drives the view-model
+    // FOV even when the world FOV has settled.
+    this.applyWeaponFov();
 
     // --- compose the transform ---
     const finalYaw = this.yaw + this.recoilYaw + this.introYawOffset;

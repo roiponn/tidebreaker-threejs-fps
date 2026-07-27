@@ -342,6 +342,44 @@ as such rather than as fixes for this bug:
 - **Smoke opacity is now tied to expansion.** Alpha fell as `(1-t)^1.6` while the sprite grew 4×,
   which manufactures smoke out of nothing. Now `(1-t)^2.4` with a smaller growth curve.
 
+### P13 — The view-model was mis-framed and window-shape dependent (FIXED)
+
+Reported from a player recording: the rifle appeared rotated, sprawled across the frame, and moved
+around wildly. Two compounding causes, and the reason **I did not catch it myself** is the second
+one.
+
+1. **The root sat 11.5 cm in front of the eye but 13.2 cm to the right.** Screen position is an
+   *angle*, and the angle to a point beside the camera depends entirely on how far forward it is.
+   At that z the pistol grip was **49° off the view axis** while the muzzle was at 13° — so the
+   rifle fanned diagonally across the frame instead of receding into it. It also meant the rifle,
+   0.29 m tall, sat 0.38 m from the eye and subtended more than the entire frame height.
+
+2. **The view-model camera was locked to a VERTICAL field of view.** three's `fov` is vertical, so
+   horizontal coverage changes with the window shape. Every frame I captured during development was
+   in a *portrait* browser pane (673×814), whose narrow horizontal frustum cropped the near end of
+   the weapon away entirely — I was looking at a sliver of it and reading that as the whole. At the
+   player's 16:9 window the same rifle was fully visible and obviously wrong.
+
+Fixes:
+
+- `PlayerCamera.applyWeaponFov()` derives the view-model camera's vertical FOV from a **horizontal**
+  target each time the aspect or ADS blend changes, so the weapon occupies the same fraction of the
+  screen *width* at any window shape. `weaponFov` / `weaponFovAds` are now horizontal degrees
+  (90 / 65). Capped at 76° vertical so a very tall window cannot produce a fisheye view-model.
+- `HIP_POSITION` moved to (0.196, −0.178, −0.500): grip ~21° off axis, muzzle ~12°, rifle height
+  about half the frame. `SPRINT_POSITION` and `RETRACT_POSITION` scaled to match, `ADS_POSITION`
+  pushed to z −0.30 (its y must stay −0.1005 to keep the optic on the screen centre).
+- `HIP_ROTATION` yaw raised to 0.15 rad so the stock — which is no longer hidden behind the near
+  plane — swings out through the bottom-right corner rather than lying across the frame.
+
+**Method note.** Every capture in this pass and the two before it was taken in a portrait pane. That
+is why the defect survived three review passes that all claimed to have "looked at actual frames".
+Looking at a frame is not enough if the frame is the wrong shape.
+
+Not verified: ADS and firing poses. The briefing phase will not advance in this browser, so the
+weapon could only be inspected in its hip pose. The ADS alignment is correct by construction (the
+optic's sight point lands on the view axis) but has not been seen.
+
 ### P12 — Enemy rigid-part appearance (IMPROVED, not eliminated)
 
 See §5.
@@ -366,7 +404,7 @@ chain-reaction verification.
 | Materials | 6 | 6.5 | 7 | 7 | Unchanged |
 | Environment density | 7 | 7 | 7 | 7 | Unchanged |
 | Sense of scale | 7 | 7.5 | 7.5 | 7.5 | Unchanged |
-| Weapon presentation | 5.5 | 7 | 7 | 7 | Unchanged |
+| Weapon presentation | 5.5 | 7 | 7 | **7.5** | The view-model was mis-framed at any normal window shape; see P13. Not scored higher because ADS and firing poses are still unseen |
 | Effects | 5 | 6 | 7 | **7.5** | The blast now falls off with distance instead of tinting the frame; the flat red damage wash is gone |
 | Readability | 7 | 7.5 | 7.5 | **8** | Removing the constant term from the damage vignette recovered the whole image during combat |
 | Consistency | 6 | 6.5 | 7.5 | 7.5 | Unchanged |
