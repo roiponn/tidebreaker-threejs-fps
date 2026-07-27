@@ -14,7 +14,9 @@
       "Bash(git commit -q -m 'feat\\(enemies,audio\\): soldiers, hitscan ballistics, shootable drums, synth audio *)",
       "Bash(curl -s \"http://localhost:5173/src/environment/WetGround.ts\")",
       "Bash(curl -s \"http://localhost:5173/src/shaders/BloomShader.ts\")",
-      "Bash(git commit -q -m 'fix\\(visual\\): first playable pass - lighting, materials, framing and input fallback *)"
+      "Bash(git commit -q -m 'fix\\(visual\\): first playable pass - lighting, materials, framing and input fallback *)",
+      "Bash(curl -s http://localhost:5173/src/main.ts)",
+      "Bash(git commit -q -m 'perf: cut draw calls 40% and forward-lighting cost; reload framing fix *)"
     ]
   }
 }

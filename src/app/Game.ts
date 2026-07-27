@@ -544,6 +544,15 @@ export class Game {
 
     this.updateHud(dt, extractionDistance);
 
+    // Mission state is mirrored onto <body> as data attributes. This is the
+    // only diagnostic that survives an isolated-world console (automated
+    // screenshots, embedded previews) and costs one DOM write per change.
+    if (document.body.dataset.phase !== this.director.phase) {
+      document.body.dataset.phase = this.director.phase;
+    }
+    const tick = Math.floor(this.clock.elapsed).toString();
+    if (document.body.dataset.tick !== tick) document.body.dataset.tick = tick;
+
     // --- 10. render ---
     this.renderSystem.setMotion(this.view.motion.x, this.view.motion.y, this.view.motionStrength);
     this.renderSystem.setFocusDistance(this.weapon.getFocusDistance());

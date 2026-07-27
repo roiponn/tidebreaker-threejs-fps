@@ -90,18 +90,11 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   torso.add(
     meshFrom(
       [
-        // Chest tapers to the shoulders rather than being a slab.
+        // Chest tapers to the shoulders rather than being a slab, and the
+        // plate carrier is merged in - the material difference between fatigue
+        // cloth and carrier nylon is not readable at combat range.
         [keep(chamferBox(0.34, 0.26, 0.21, 0.035, 2)), trs(0, 0.16, 0)],
         [keep(chamferBox(0.30, 0.14, 0.19, 0.03, 1)), trs(0, 0.01, 0)],
-      ],
-      fatigue,
-      'chest',
-    ),
-  );
-  torso.add(
-    meshFrom(
-      [
-        // Plate carrier, proud of the chest.
         [keep(chamferBox(0.32, 0.30, 0.10, 0.02, 1)), trs(0, 0.13, 0.075)],
         [keep(chamferBox(0.30, 0.28, 0.07, 0.02, 1)), trs(0, 0.13, -0.075)],
         // Magazine pouches - three across the front.
@@ -137,27 +130,24 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
       'head',
     ),
   );
+  // Helmet, NVG mount, rails and visor merged into ONE gear-material mesh.
+  // Eleven soldiers on screen make per-part meshes a real draw-call problem.
   const helmetGeo = keep(new THREE.SphereGeometry(0.115, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.62));
-  const helmet = new THREE.Mesh(helmetGeo, gear);
-  helmet.position.set(0, 0.05, 0);
-  helmet.scale.set(1, 1.05, 1.1);
-  helmet.castShadow = true;
-  head.add(helmet);
+  helmetGeo.scale(1, 1.05, 1.1);
   head.add(
     meshFrom(
       [
-        // NVG mount + rails.
+        [helmetGeo, trs(0, 0.05, 0)],
         [keep(chamferBox(0.05, 0.045, 0.03, 0.008, 1)), trs(0, 0.09, 0.10)],
         [keep(chamferBox(0.02, 0.05, 0.10, 0.005, 1)), trs(-0.10, 0.05, 0)],
         [keep(chamferBox(0.02, 0.05, 0.10, 0.005, 1)), trs(0.10, 0.05, 0)],
+        [keep(chamferBox(0.14, 0.05, 0.03, 0.008, 1)), trs(0, 0.03, 0.085)],
       ],
-      metal,
-      'helmetRails',
+      gear,
+      'helmet',
     ),
   );
-  const visor = new THREE.Mesh(keep(chamferBox(0.14, 0.05, 0.03, 0.008, 1)), mats.glass());
-  visor.position.set(0, 0.03, 0.085);
-  head.add(visor);
+  void metal;
 
   // --- arms: upper + forearm, posed in a low-ready weapon grip ---
   const makeArm = (side: number): THREE.Group => {
@@ -170,13 +160,16 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
     const elbow = new THREE.Group();
     elbow.position.y = -0.20;
     arm.add(elbow);
-    const fore = new THREE.Mesh(keep(chamferBox(0.075, 0.19, 0.08, 0.02, 1)), fatigue);
-    fore.position.y = -0.095;
-    fore.castShadow = true;
+    // Forearm + glove in one mesh.
+    const fore = meshFrom(
+      [
+        [keep(chamferBox(0.075, 0.19, 0.08, 0.02, 1)), trs(0, -0.095, 0)],
+        [keep(chamferBox(0.07, 0.08, 0.075, 0.02, 1)), trs(0, -0.20, 0)],
+      ],
+      fatigue,
+      'forearm',
+    );
     elbow.add(fore);
-    const glove = new THREE.Mesh(keep(chamferBox(0.07, 0.08, 0.075, 0.02, 1)), gear);
-    glove.position.y = -0.20;
-    elbow.add(glove);
     // Pre-pose: elbows in, forearms forward.
     arm.rotation.set(-1.05, side * -0.18, side * 0.22);
     elbow.rotation.x = 0.55;
@@ -221,18 +214,18 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
     const knee = new THREE.Group();
     knee.position.y = -0.36;
     leg.add(knee);
-    const shin = new THREE.Mesh(keep(chamferBox(0.11, 0.36, 0.12, 0.025, 1)), fatigue);
-    shin.position.y = -0.18;
-    shin.castShadow = true;
-    knee.add(shin);
-    const boot = new THREE.Mesh(keep(chamferBox(0.12, 0.10, 0.24, 0.02, 1)), gear);
-    boot.position.set(0, -0.38, 0.04);
-    boot.castShadow = true;
-    knee.add(boot);
-    // Knee pad.
-    const pad = new THREE.Mesh(keep(chamferBox(0.11, 0.09, 0.05, 0.02, 1)), gear);
-    pad.position.set(0, -0.02, 0.08);
-    knee.add(pad);
+    // Shin + boot + knee pad in one mesh.
+    knee.add(
+      meshFrom(
+        [
+          [keep(chamferBox(0.11, 0.36, 0.12, 0.025, 1)), trs(0, -0.18, 0)],
+          [keep(chamferBox(0.12, 0.10, 0.24, 0.02, 1)), trs(0, -0.38, 0.04)],
+          [keep(chamferBox(0.11, 0.09, 0.05, 0.02, 1)), trs(0, -0.02, 0.08)],
+        ],
+        fatigue,
+        'lowerLeg',
+      ),
+    );
     leg.userData.knee = knee;
     return leg;
   };

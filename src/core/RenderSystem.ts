@@ -58,6 +58,7 @@ export class RenderSystem {
   private adaptMat!: THREE.ShaderMaterial;
   private copyMat!: THREE.ShaderMaterial;
   private quad!: FullScreenQuad;
+  private whiteTexture!: THREE.DataTexture;
 
   /** Backing store size in device pixels (after DPR + render scale). */
   private width = 1;
@@ -102,6 +103,8 @@ export class RenderSystem {
 
     this.buildMaterials();
     this.quad = new FullScreenQuad(this.copyMat);
+    this.whiteTexture = createWhiteTexture();
+    this.disposer.track(this.whiteTexture);
     this.buildTargets(1, 1);
   }
 
@@ -391,8 +394,12 @@ export class RenderSystem {
     // so the canvas keeps its stylesheet-driven 100%x100% layout box and
     // renderScale is honoured independently of the layout.
     this.renderer.setPixelRatio(1);
-    const w = Math.max(2, Math.round(cssWidth * scale));
-    const h = Math.max(2, Math.round(cssHeight * scale));
+    // Round to even dimensions. Odd-sized depth textures and odd bloom mips hit
+    // slow driver paths on some GPUs (measured: an odd 680x383 target ran 4x
+    // slower than an even 1600x900 one on the same machine, despite a fifth of
+    // the pixels).
+    const w = Math.max(2, Math.round((cssWidth * scale) / 2) * 2);
+    const h = Math.max(2, Math.round((cssHeight * scale) / 2) * 2);
     this.renderer.setSize(w, h, false);
     this.buildTargets(w, h);
   }
@@ -482,8 +489,8 @@ export class RenderSystem {
     // --- 6. composite ---
     const c = this.compositeMat.uniforms;
     c.tDiffuse.value = sceneTexture;
-    c.tBloom.value = this.quality.bloom ? this.bloomRTs[0].texture : null;
-    c.tAo.value = this.quality.ssao && this.visual.ao.enabled ? this.aoRT.texture : null;
+    c.tBloom.value = this.quality.bloom ? this.bloomRTs[0].texture : this.whiteTexture;
+    c.tAo.value = this.quality.ssao && this.visual.ao.enabled ? this.aoRT.texture : this.whiteTexture;
     c.tDepth.value = depthTexture;
     c.tAdapt.value = this.adaptRTs[this.adaptIndex].texture;
     (c.uResolution.value as THREE.Vector2).set(this.width, this.height);
@@ -515,19 +522,23 @@ export class RenderSystem {
     c.uFade.value = this.fadeAmount;
     (c.uFadeColor.value as THREE.Vector3).set(this.fadeColor.r, this.fadeColor.g, this.fadeColor.b);
 
-    const useFxaa = this.quality.antialias;
+    // The composite ALWAYS writes to an offscreen LDR target, and a final pass
+    // always blits that to the canvas. Keeping one code path for both presets
+    // means the expensive composite shader never renders straight to the
+    // default framebuffer, which behaves very differently across drivers.
     this.quad.material = this.compositeMat;
-    renderer.setRenderTarget(useFxaa ? this.ldrRT : null);
+    renderer.setRenderTarget(this.ldrRT);
     this.quad.render(renderer);
 
-    // --- 7. antialias to the canvas ---
-    if (useFxaa) {
-      this.fxaaMat.uniforms.tDiffuse.value = this.ldrRT.texture;
+    // --- 7. antialias (or a plain copy) to the canvas ---
+    const finalMat = this.quality.antialias ? this.fxaaMat : this.copyMat;
+    finalMat.uniforms.tDiffuse.value = this.ldrRT.texture;
+    if (this.quality.antialias) {
       (this.fxaaMat.uniforms.uResolution.value as THREE.Vector2).set(this.width, this.height);
-      this.quad.material = this.fxaaMat;
-      renderer.setRenderTarget(null);
-      this.quad.render(renderer);
     }
+    this.quad.material = finalMat;
+    renderer.setRenderTarget(null);
+    this.quad.render(renderer);
   }
 
   private renderSsao(camera: THREE.PerspectiveCamera, elapsed: number): void {
@@ -642,6 +653,13 @@ export class RenderSystem {
     this.disposer.dispose();
     this.renderer.dispose();
   }
+}
+
+/** 1x1 opaque white, used to keep every sampler bound when a pass is off. */
+function createWhiteTexture(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /** Cosine-weighted hemisphere kernel, biased toward the origin. */

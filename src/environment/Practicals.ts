@@ -167,16 +167,20 @@ export class Practicals {
   }
 
   /** Rotating hazard beacon. Sweeps a coloured wedge across the scene. */
-  addBeacon(position: THREE.Vector3, color = 0xff5a2a): void {
+  addBeacon(position: THREE.Vector3, color = 0xff5a2a, withLight = false): void {
     const p = this.visual.practicals;
     const pivot = new THREE.Object3D();
     pivot.position.copy(position);
     this.group.add(pivot);
 
+    // Same reasoning as addStripLight: most beacons are read from their glowing
+    // dome and rotating shaft, not from the light they cast on the deck.
     const light = new THREE.PointLight(color, p.beaconIntensity, 24, 2);
-    light.layers.enable(LAYER.VIEWMODEL);
-    pivot.add(light);
-    this.lightCount++;
+    if (withLight) {
+      light.layers.enable(LAYER.VIEWMODEL);
+      pivot.add(light);
+      this.lightCount++;
+    }
 
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.6),
@@ -199,7 +203,7 @@ export class Practicals {
    * Hanging industrial lamp on a cord. Swings from explosions and gunfire -
    * the single cheapest trick for making a static room feel alive.
    */
-  addHangingLamp(anchor: THREE.Vector3, cordLength: number, color = 0xffd9a8): void {
+  addHangingLamp(anchor: THREE.Vector3, cordLength: number, color = 0xffd9a8, withLight = true): void {
     const group = new THREE.Group();
     group.position.copy(anchor);
     this.group.add(group);
@@ -229,9 +233,11 @@ export class Practicals {
 
     const light = new THREE.PointLight(color, 65, 16, 2);
     light.position.y = -cordLength - 0.14;
-    light.layers.enable(LAYER.VIEWMODEL);
-    group.add(light);
-    this.lightCount++;
+    if (withLight) {
+      light.layers.enable(LAYER.VIEWMODEL);
+      group.add(light);
+      this.lightCount++;
+    }
 
     this.disposables.push(cord.geometry, shadeGeo, bulb.geometry);
     this.hanging.push({ group, light, angleX: 0, angleZ: 0, velX: 0, velZ: 0 });
@@ -247,8 +253,16 @@ export class Practicals {
     });
   }
 
-  /** Cool fluorescent strip - used inside the warehouse and under the canopy. */
-  addStripLight(position: THREE.Vector3, rotationY: number, length: number): void {
+  /**
+   * Cool fluorescent strip.
+   *
+   * `withLight` is OFF by default. three's forward renderer evaluates EVERY
+   * light for every lit fragment, so each extra point light is a per-pixel cost
+   * across the whole screen. A glowing emissive bar plus bloom reads as a lit
+   * fixture on its own; only strips that need to actually spill light onto
+   * geometry (the open roller door) pay for a real light.
+   */
+  addStripLight(position: THREE.Vector3, rotationY: number, length: number, withLight = false): void {
     const p = this.visual.practicals;
     const geo = new THREE.BoxGeometry(length, 0.06, 0.14);
     const mesh = new THREE.Mesh(geo, this.mats.emissive('strip', p.stripColor, 4.5));
@@ -258,11 +272,20 @@ export class Practicals {
     this.group.add(mesh);
     this.disposables.push(geo);
 
-    const light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
-    light.position.copy(position).add(new THREE.Vector3(0, -0.15, 0));
-    light.layers.enable(LAYER.VIEWMODEL);
-    this.group.add(light);
-    this.lightCount++;
+    let light: THREE.Light;
+    if (withLight) {
+      const point = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
+      point.position.copy(position).add(new THREE.Vector3(0, -0.15, 0));
+      point.layers.enable(LAYER.VIEWMODEL);
+      this.group.add(point);
+      this.lightCount++;
+      light = point;
+    } else {
+      // A detached light object: the flicker system still drives its intensity,
+      // which drives the emissive mesh, but it is never added to the scene and
+      // so costs nothing in the shader.
+      light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
+    }
 
     this.flickers.push({
       light,

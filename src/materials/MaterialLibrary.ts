@@ -325,19 +325,19 @@ export class MaterialLibrary {
   // -------------------------------------------------------------------
 
   gunMetal(): SurfaceMaterial {
-    return this.standard('gunMetal', this.trackSet(tiled(this.textures.gunMetal(), 16, 16)), 'metal', {
+    return this.standard('gunMetal', this.trackSet(tiled(this.textures.gunMetal(), 26, 26)), 'metal', {
       normalScale: 0.85,
     });
   }
 
   gunPolymer(): SurfaceMaterial {
-    return this.standard('gunPolymer', this.trackSet(tiled(this.textures.gunPolymer(), 22, 22)), 'wood', {
+    return this.standard('gunPolymer', this.trackSet(tiled(this.textures.gunPolymer(), 48, 48)), 'wood', {
       normalScale: 0.9,
     });
   }
 
   gunRubber(): SurfaceMaterial {
-    return this.standard('gunRubber', this.trackSet(tiled(this.textures.rubber(157), 26, 26)), 'wood', {
+    return this.standard('gunRubber', this.trackSet(tiled(this.textures.rubber(157), 42, 42)), 'wood', {
       normalScale: 1.1,
     });
   }

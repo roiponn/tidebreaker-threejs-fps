@@ -237,7 +237,7 @@ export class HarborLevel {
     this.practicals.addStripLight(new THREE.Vector3(-3.4, 5.05, 3.2), Math.PI / 2, 2.4);
     this.practicals.addStripLight(new THREE.Vector3(2.2, 5.05, -3.6), Math.PI / 2, 2.4);
     this.practicals.addHangingLamp(new THREE.Vector3(-2.2, 5.2, -0.6), 0.85);
-    this.practicals.addHangingLamp(new THREE.Vector3(3.1, 5.2, 4.4), 1.15);
+    this.practicals.addHangingLamp(new THREE.Vector3(3.1, 5.2, 4.4), 1.15, 0xffd9a8, false);
 
     // Clutter: pallets, drums, a cabinet and a tarp that moves in the draught.
     this.prop(zone, this.kit.pallet(), trs(-4.2, 0, -5.6, 0, 0.4, 0));
@@ -336,7 +336,7 @@ export class HarborLevel {
     // failing lamp deep in the canyon to break the darkness.
     this.addFloodMast(new THREE.Vector3(9.6, 0, 9.4), 6.4, new THREE.Vector3(16, 0.4, 0), 0);
     this.addFloodMast(new THREE.Vector3(28.6, 0, -10.4), 5.8, new THREE.Vector3(23, 0.4, -2), 0.55);
-    this.practicals.addBeacon(new THREE.Vector3(19.4, 2.72, 1.2));
+    this.practicals.addBeacon(new THREE.Vector3(19.4, 2.72, 1.2), 0xff5a2a, true);
     this.practicals.addHangingLamp(new THREE.Vector3(21.0, 5.4, -8.2), 0.7, 0xffc98a);
 
     // A cable draped between the stacks, catching the rim light.
@@ -540,7 +540,8 @@ export class HarborLevel {
     }
     // Interior box behind the door so the opening is not a black void.
     this.slab(zone, doorW + 3, 6.4, 0.4, doorX, 3.2, zFace + 7.4, this.mats.concreteWall(), false);
-    this.practicals.addStripLight(new THREE.Vector3(doorX - 1.2, 4.6, zFace + 3.2), 0, 3);
+    // The open roller door is the one strip that must spill onto the yard.
+    this.practicals.addStripLight(new THREE.Vector3(doorX - 1.2, 4.6, zFace + 3.2), 0, 3, true);
     this.practicals.addStripLight(new THREE.Vector3(doorX + 1.4, 4.6, zFace + 5.6), 0, 3);
     this.practicals.addHangingLamp(new THREE.Vector3(doorX, 5.0, zFace + 1.6), 0.9, 0xffcf9a);
     this.prop(zone, this.kit.drum(true), trs(doorX - 1.9, 0, zFace + 1.2), {
@@ -586,18 +587,24 @@ export class HarborLevel {
 
     // Facade floodlights aimed down into the yard - the motivation for the
     // pools of light the player fights in.
-    for (const [lx, tx] of [
-      [20, 18],
-      [29, 30],
-      [41, 42],
+    // Four fixtures, two real lights. Every additional spot light is evaluated
+    // per-pixel across the whole screen by three's forward renderer, so the
+    // facade gets the two that actually pool light where the player fights.
+    for (const [lx, tx, lit] of [
+      [20, 18, 0],
+      [29, 30, 1],
+      [37, 36, 0],
+      [43, 42, 1],
     ] as const) {
       const wl = this.kit.wallLight();
       this.prop(zone, wl.pieces, trs(lx, 7.2, zFace - 0.35, 0, Math.PI, 0));
-      this.practicals.addFloodlight(
-        new THREE.Vector3(lx, 6.9, zFace - 1.0),
-        new THREE.Vector3(tx, 0, 1.5),
-        { angle: 0.55, intensity: 42 },
-      );
+      if (lit) {
+        this.practicals.addFloodlight(
+          new THREE.Vector3(lx, 6.9, zFace - 1.0),
+          new THREE.Vector3(tx, 0, 1.5),
+          { angle: 0.6, intensity: 760 },
+        );
+      }
     }
     this.practicals.addBeacon(new THREE.Vector3(x1 - 0.6, height + 1.1, zFace - 0.4), 0xff5030);
   }
@@ -639,7 +646,9 @@ export class HarborLevel {
     this.prop(zone, this.kit.fence(15.6), trs(4, 0.55, -13.4, 0, 0, 0));
     this.prop(zone, this.kit.fence(11.2), trs(48, 0.55, -13.4, 0, 0, 0));
 
-    this.addFloodMast(new THREE.Vector3(16.5, 0.55, -13.9), 6.8, new THREE.Vector3(14, 0.4, -6), 0);
+    // Fixture only - the quay-side mast is background dressing and its pool of
+    // light never lands anywhere the player fights.
+    this.addFloodMast(new THREE.Vector3(16.5, 0.55, -13.9), 6.8, new THREE.Vector3(14, 0.4, -6), 0, false);
     this.practicals.addBeacon(new THREE.Vector3(40, 1.2, -14.4), 0xff5a2a);
   }
 
@@ -682,7 +691,9 @@ export class HarborLevel {
     const mast = new THREE.CylinderGeometry(0.06, 0.08, 3.2, 8);
     this.disposables.push(mast);
     this.builder.place(zone, this.mats.steelPainted(), mast, trs(53, 1.6, -5.4));
-    this.practicals.addBeacon(new THREE.Vector3(53, 3.3, -5.4), 0x38ff8a);
+    // The extraction strobe is the level's primary wayfinding cue; it gets a
+    // real light so it reads on the pad itself.
+    this.practicals.addBeacon(new THREE.Vector3(53, 3.3, -5.4), 0x38ff8a, true);
     this.practicals.addFloodlight(
       new THREE.Vector3(56.8, 4.4, 2.6),
       new THREE.Vector3(53, 0, -2),
@@ -778,7 +789,13 @@ export class HarborLevel {
     this.disposables.push(geo, mat);
   }
 
-  private addFloodMast(base: THREE.Vector3, height: number, aim: THREE.Vector3, instability: number): void {
+  private addFloodMast(
+    base: THREE.Vector3,
+    height: number,
+    aim: THREE.Vector3,
+    instability: number,
+    lit = true,
+  ): void {
     const mast = this.kit.floodlightMast(height);
     this.prop('lights', mast.pieces, trs(base.x, base.y, base.z, 0, Math.atan2(aim.x - base.x, aim.z - base.z), 0), {
       size: new THREE.Vector3(0.5, height, 0.5),
@@ -790,7 +807,7 @@ export class HarborLevel {
       base.y + mast.headOffset.y,
       base.z + dir.z * mast.headOffset.z,
     );
-    this.practicals.addFloodlight(head, aim, { instability });
+    if (lit) this.practicals.addFloodlight(head, aim, { instability });
   }
 
   // ------------------------------------------------------------------

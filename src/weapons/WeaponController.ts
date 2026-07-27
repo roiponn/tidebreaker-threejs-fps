@@ -284,10 +284,15 @@ export class WeaponController {
     if (t < 0.22) magDrop = smoothstep(t / 0.22) * 0.9;
     else if (t < 0.62) magDrop = 0.9 + (t - 0.22) * 1.4;
     else if (t < 0.8) magDrop = lerp(1.1, 0, smoothstep((t - 0.62) / 0.18));
-    this.parts.magazine.position.y = -0.068 - magDrop * 0.26;
-    this.parts.magazine.position.z = -0.035 + magDrop * 0.05;
-    this.parts.magazine.rotation.x = magDrop * 0.55;
-    this.parts.magazine.visible = !(t > 0.28 && t < 0.6);
+    // The magazine falls DOWN AND AWAY from the camera. Dropping it straight
+    // down sweeps a 20cm object across the lens at 15cm, which fills a third of
+    // the screen with a blurry slab - the single ugliest frame in the reload.
+    this.parts.magazine.position.y = -0.068 - magDrop * 0.16;
+    this.parts.magazine.position.z = -0.035 - magDrop * 0.14;
+    this.parts.magazine.rotation.x = magDrop * 0.35;
+    // Hidden earlier and for longer, so the "empty mag falls away" beat is
+    // implied rather than shown in extreme close-up.
+    this.parts.magazine.visible = !(t > 0.2 && t < 0.62);
 
     if (!this.magSwapDone && t >= WEAPON_CONFIG.reloadAmmoSwapAt) {
       this.magSwapDone = true;
@@ -304,9 +309,12 @@ export class WeaponController {
     }
 
     // --- weapon body motion during the reload ---
+    // Tilt the weapon toward the off-hand and slightly away from the camera.
+    // Kept modest: a big swing looks dramatic in isolation but obscures the
+    // whole screen during a 2.4-second animation the player must fight through.
     const swing = Math.sin(t * Math.PI);
-    this.reloadPos.set(-0.02 * swing, -0.05 * swing, 0.03 * swing);
-    this.reloadRot.set(0.22 * swing, 0.34 * swing, -0.42 * swing);
+    this.reloadPos.set(-0.015 * swing, -0.035 * swing, -0.02 * swing);
+    this.reloadRot.set(0.16 * swing, 0.26 * swing, -0.30 * swing);
 
     // Empty reload: charging handle is racked at the end.
     if (this.reloadWasEmpty && t > 0.84 && this.boltVelocity === 0 && this.boltOffset < 0.001) {

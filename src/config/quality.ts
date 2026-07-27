@@ -17,7 +17,12 @@ export interface QualitySettings {
   renderScale: number;
   shadows: boolean;
   shadowMapSize: number;
-  /** Number of practical lights allowed to cast shadows. */
+  /**
+   * Number of practical lights allowed to cast shadows.
+   * Currently 0 on every preset: each one costs a full extra scene render and
+   * measured at ~15% of frame time for a barely visible result. Kept as a knob
+   * because a future scene with fewer objects could afford one.
+   */
   shadowCastingPracticals: number;
   ssao: boolean;
   /** SSAO render scale relative to the main framebuffer. */
@@ -72,7 +77,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     renderScale: 1,
     shadows: true,
     shadowMapSize: 2048,
-    shadowCastingPracticals: 1,
+    shadowCastingPracticals: 0,
     ssao: true,
     ssaoScale: 0.5,
     bloom: true,
@@ -94,7 +99,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     renderScale: 1,
     shadows: true,
     shadowMapSize: 2048,
-    shadowCastingPracticals: 2,
+    shadowCastingPracticals: 0,
     ssao: true,
     ssaoScale: 0.6,
     bloom: true,
@@ -114,8 +119,14 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
 
 export const DEFAULT_QUALITY: QualityLevel = 'high';
 
-/** Rough auto-detect so first launch is not a slideshow on a laptop iGPU. */
+/**
+ * Rough auto-detect so first launch is not a slideshow on a laptop iGPU.
+ * `?quality=low|medium|high` in the URL overrides it, which is how the
+ * presets are compared when profiling.
+ */
 export function detectQuality(): QualityLevel {
+  const forced = new URLSearchParams(window.location.search).get('quality');
+  if (forced === 'low' || forced === 'medium' || forced === 'high') return forced;
   const dpr = window.devicePixelRatio || 1;
   const cores = navigator.hardwareConcurrency ?? 4;
   const gl = document.createElement('canvas').getContext('webgl2');

@@ -29,7 +29,7 @@ export const VISUAL_CONFIG = {
 
   exposure: {
     /** ACES-filmic exposure multiplier applied in the composite pass. */
-    base: 1.35,
+    base: 1.62,
     /** Eye adaptation speed (units/sec) - deliberately slow and subtle. */
     adaptionSpeed: 0.55,
     /** How far auto-exposure is allowed to drift from `base`. */
@@ -38,15 +38,15 @@ export const VISUAL_CONFIG = {
 
   /** Dusk-to-night sky. `timeOfDay` 0 = late dusk, 1 = deep night. */
   sky: {
-    timeOfDay: 0.34,
+    timeOfDay: 0.42,
     zenithDay: 0x0f2740,
-    zenithNight: 0x070c18,
+    zenithNight: 0x0a1524,
     horizonDay: 0xd06a34,
-    horizonNight: 0x2a2f45,
+    horizonNight: 0x35405e,
     groundHaze: 0x151a24,
     /** Angular size / softness of the sun disc glow on the sky dome. */
     sunGlowPower: 620,
-    starIntensity: 0.55,
+    starIntensity: 0.75,
     cloudCoverage: 0.6,
     cloudSpeed: 0.0035,
   },
@@ -56,9 +56,9 @@ export const VISUAL_CONFIG = {
     azimuth: 108,
     elevation: 3.4,
     colorDay: 0xffc08a,
-    colorNight: 0x4a6ea8,
+    colorNight: 0x6f8fc4,
     intensityDay: 2.6,
-    intensityNight: 0.28,
+    intensityNight: 0.85,
     shadowMapSize: 2048,
     shadowBias: -0.0008,
     shadowNormalBias: 0.035,
@@ -69,22 +69,22 @@ export const VISUAL_CONFIG = {
 
   ambient: {
     /** Hemisphere fill so shadowed areas keep readable information. */
-    skyColor: 0x5580ad,
+    skyColor: 0x4f74a3,
     groundColor: 0x241d16,
-    intensity: 1.15,
+    intensity: 1.3,
     /** Strength of the PMREM environment probe on all PBR materials. */
-    envIntensity: 1.05,
+    envIntensity: 1.15,
   },
 
   fog: {
-    color: 0x2b3852,
+    color: 0x223047,
     /** Exponential-squared density; the harbour reads best around 0.012. */
     density: 0.0138,
     /** Extra near-ground mist layer height (metres). */
     mistHeight: 3.2,
     mistDensity: 0.55,
     /** Aerial perspective tint applied to distant geometry. */
-    aerialColor: 0x54708f,
+    aerialColor: 0x466288,
     aerialStrength: 0.45,
   },
 
@@ -153,7 +153,7 @@ export const VISUAL_CONFIG = {
   /** Practical lights placed in the level (floodlights, beacons, strips). */
   practicals: {
     floodColor: 0xffd9a8,
-    floodIntensity: 520,
+    floodIntensity: 620,
     floodDistance: 38,
     floodAngle: 0.52,
     floodPenumbra: 0.45,

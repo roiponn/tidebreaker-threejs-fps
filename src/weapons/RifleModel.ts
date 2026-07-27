@@ -82,11 +82,14 @@ export function buildRifle(mats: MaterialLibrary): RifleParts {
 
   // Top rail: 15 teeth. Individually tiny, collectively the most
   // recognisable "this is a modern firearm" silhouette detail.
-  const railTooth = keep(chamferBox(0.021, 0.008, 0.0086, 0.0016, 1));
-  const railBase = keep(chamferBox(0.021, 0.006, 0.30, 0.0015, 1));
+  // 13 teeth at 2.1cm pitch. The original 20-at-1.4cm pitch was sub-pixel at
+  // view-model distance and aliased into white speckle rather than reading as
+  // a rail - detail below the pixel grid costs performance and looks worse.
+  const railTooth = keep(chamferBox(0.023, 0.009, 0.013, 0.0018, 1));
+  const railBase = keep(chamferBox(0.023, 0.007, 0.30, 0.0016, 1));
   add(metalParts, railBase, trs(0, 0.058, -0.06));
-  for (let i = 0; i < 20; i++) {
-    add(metalParts, railTooth, trs(0, 0.065, 0.06 - i * 0.0142));
+  for (let i = 0; i < 13; i++) {
+    add(metalParts, railTooth, trs(0, 0.066, 0.055 - i * 0.021));
   }
 
   // ==================================================================

@@ -221,23 +221,25 @@ export class TextureFactory {
       for (let i = 0; i < height.length; i++) height[i] = chips[i] * 0.45 + grain[i] * 0.35;
       normalizeField(height);
 
-      const dark = hexToRgb(0x24262a);
-      const mid = hexToRgb(0x3a3d42);
+      const dark = hexToRgb(0x30343a);
+      const mid = hexToRgb(0x4c5158);
       const oilTint = hexToRgb(0x1a1d24);
 
       return bake(
         {
           res,
           height,
-          normalStrength: 1.7,
+          // A shallow normal: at 1.5m tiles the aggregate is near the pixel
+          // grid, and a strong normal there is indistinguishable from noise.
+          normalStrength: 0.75,
           aoRadius: 2,
-          aoStrength: 2.2,
+          aoStrength: 1.3,
           color: (i, _u, _v, h) => {
             let c = mixRgb(dark, mid, h * 0.9 + wear[i] * 0.2);
             c = mixRgb(c, oilTint, Math.max(0, oil[i] - 0.5) * 1.3);
             return c;
           },
-          roughness: (i, _u, _v, h) => 0.82 - h * 0.1 - Math.max(0, oil[i] - 0.55) * 0.55,
+          roughness: (i, _u, _v, h) => Math.max(0.4, 0.86 - h * 0.08 - Math.max(0, oil[i] - 0.6) * 0.35),
           metalness: (i) => Math.max(0, oil[i] - 0.72) * 0.35,
         },
         this.anisotropy,
