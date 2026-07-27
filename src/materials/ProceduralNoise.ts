@@ -150,8 +150,10 @@ export function buildField(res: number, fn: (u: number, v: number, x: number, y:
 /** In-place separable box blur (approximates a gaussian in 2 passes). */
 export function blurField(field: Float32Array, res: number, radius: number, passes = 2): Float32Array {
   if (radius < 1) return field;
-  let src = field;
-  let dst = new Float32Array(field.length);
+  // `typeof field` keeps the ArrayBufferLike generic so the ping-pong swap
+  // below type-checks under TypeScript 5.7+ typed-array generics.
+  let src: typeof field = field;
+  let dst: typeof field = new Float32Array(field.length);
   const r = Math.round(radius);
   for (let pass = 0; pass < passes; pass++) {
     // Horizontal (wrapping, to preserve tiling).

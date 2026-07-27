@@ -5,7 +5,10 @@
       "Bash(git --version)",
       "Bash(npm install *)",
       "Bash(npm ls *)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'feat\\(level\\): BERTH 7 harbour - layout, props, practicals, wet ground, distant scenery *)"
     ]
   }
 }

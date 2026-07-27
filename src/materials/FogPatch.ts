@@ -66,8 +66,8 @@ export function installFogPatch(): void {
     vFogWorldY = worldPosition.y;
     vFogViewDir = worldPosition.xyz - cameraPosition;
   #else
-    // Fallback for unlit/sprite/points shaders where `transformed` and
-    // `worldPosition` may not exist: unproject the view-space position.
+    // Fallback for unlit/sprite/points shaders where transformed and
+    // worldPosition may not exist: unproject the view-space position.
     vec4 fogWorldPos = inverse( viewMatrix ) * vec4( mvPosition.xyz, 1.0 );
     vFogWorldY = fogWorldPos.y;
     vFogViewDir = fogWorldPos.xyz - cameraPosition;

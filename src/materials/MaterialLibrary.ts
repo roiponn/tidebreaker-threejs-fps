@@ -102,7 +102,11 @@ export class MaterialLibrary {
     key: string,
     set: TextureSet,
     surface: SurfaceKind,
-    overrides: Partial<THREE.MeshStandardMaterialParameters> & { normalScale?: number } = {},
+    // normalScale is exposed as a scalar here (three wants a Vector2) because
+    // every surface in this project scales both axes together.
+    overrides: Omit<Partial<THREE.MeshStandardMaterialParameters>, 'normalScale'> & {
+      normalScale?: number;
+    } = {},
   ): SurfaceMaterial {
     const existing = this.materials.get(key);
     if (existing) return existing as SurfaceMaterial;
