@@ -255,10 +255,22 @@ export class HarborLevel {
 
     this.addTarp(new THREE.Vector3(-4.2, 1.05, -5.6), 1.5, 1.2, 0.35);
 
-    // Painted floor markings: a hazard-striped kerb at the bay mouth.
-    const kerb = chamferBox(0.5, 0.12, 16, 0.02, 1);
-    this.disposables.push(kerb);
-    this.builder.place(zone, this.mats.hazard(), kerb, trs(7.6, 0.06, 0), { collide: false });
+    // Threshold marking at the bay mouth.
+    //
+    // This was a 16m x 12cm RAISED kerb. From the player's spawn it drew an
+    // unbroken horizontal band straight across the middle of the opening shot
+    // and read as a step in the deck - it was repeatedly mistaken for a
+    // shading artefact in the wet ground during review. A loading bay
+    // threshold is painted, not kerbed: flush segments with gaps, so it
+    // describes the ground plane instead of cutting the frame in half.
+    const markSegment = chamferBox(0.34, 0.014, 2.6, 0.004, 1);
+    this.disposables.push(markSegment);
+    for (const mz of [-6.2, -3.1, 0.6, 3.9, 7.0]) {
+      this.builder.place(zone, this.mats.hazard(), markSegment, trs(7.6, 0.008, mz), {
+        collide: false,
+        castShadow: false,
+      });
+    }
   }
 
   // ------------------------------------------------------------------

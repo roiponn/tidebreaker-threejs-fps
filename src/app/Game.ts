@@ -201,6 +201,17 @@ export class Game {
       });
 
       this.player.spawn(this.level.playerSpawn, this.level.playerSpawnYaw);
+      const params = new URLSearchParams(window.location.search);
+      // ?posetest=1 lines hostiles up at fixed distances with the AI frozen,
+      // so joint quality can be inspected repeatably.
+      if (params.has('posetest')) {
+        this.enemies.setPoseTest(true, this.level.playerSpawn, this.level.playerSpawnYaw);
+      }
+      // ?exposure=N overrides the authored exposure. The debug panel has the
+      // same control, but a URL form is scriptable, which is what makes
+      // "inspect this asset lit rather than as a silhouette" repeatable.
+      const exposure = Number(params.get('exposure'));
+      if (Number.isFinite(exposure) && exposure > 0) this.visual.exposure.base = exposure;
       this.handleResize();
 
       // Render one frame before hiding the loader so the first thing the

@@ -214,6 +214,35 @@ export class MaterialLibrary {
     });
   }
 
+  /**
+   * Soldier fatigues and load-bearing gear.
+   *
+   * These exist because the hostiles previously borrowed the WEAPON materials:
+   * near-black, and tiled at 26-48 repeats per metre for centimetre-scale gun
+   * parts. On a 1.8m figure that produced a featureless dark mannequin with no
+   * readable surface at any distance. Fabric at ~3.5 tiles/m gives a weave the
+   * eye can actually resolve, and a mid-tone keeps the silhouette readable
+   * against both the warm sodium pools and the cool deck.
+   */
+  soldierFatigue(): SurfaceMaterial {
+    return this.standard(
+      'soldierFatigue',
+      this.trackSet(tiled(this.textures.fabric(0x4d5347, 211), 3.4, 3.4)),
+      'flesh',
+      { normalScale: 0.8 },
+    );
+  }
+
+  /** Carrier, helmet, pouches, boots: darker, tighter-woven nylon. */
+  soldierGear(): SurfaceMaterial {
+    return this.standard(
+      'soldierGear',
+      this.trackSet(tiled(this.textures.fabric(0x30332e, 223), 5.5, 5.5)),
+      'flesh',
+      { normalScale: 0.9 },
+    );
+  }
+
   glass(): THREE.MeshPhysicalMaterial {
     const existing = this.materials.get('glass');
     if (existing) return existing as THREE.MeshPhysicalMaterial;

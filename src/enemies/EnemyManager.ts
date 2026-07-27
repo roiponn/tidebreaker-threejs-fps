@@ -66,6 +66,18 @@ export class EnemyManager {
   /** Debug switch: disables all AI and hides every soldier. */
   enabled = true;
 
+  /**
+   * Pose-test mode (?posetest=1).
+   *
+   * Lines the first four hostiles up at 2, 4, 8 and 12 metres directly ahead of
+   * the player and cycles them through every pose the rig can reach, with the
+   * AI frozen. Inspecting joint quality by chasing a strafing enemy around the
+   * level is not repeatable; this is.
+   */
+  private poseTest = false;
+  private poseTestOrigin = new THREE.Vector3();
+  private poseTestForward = new THREE.Vector3(1, 0, 0);
+
   private readonly tmpVec = new THREE.Vector3();
   private readonly tmpVec2 = new THREE.Vector3();
   private readonly sphereCenter = new THREE.Vector3();
@@ -122,6 +134,34 @@ export class EnemyManager {
 
   get total(): number {
     return this.enemies.length;
+  }
+
+  /** Freezes the AI and lines hostiles up at fixed inspection distances. */
+  setPoseTest(enabled: boolean, origin: THREE.Vector3, yaw: number): void {
+    this.poseTest = enabled;
+    this.poseTestOrigin.copy(origin);
+    this.poseTestForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+    if (!enabled) return;
+    const distances = [2, 4, 8, 12];
+    for (let i = 0; i < this.enemies.length; i++) {
+      const enemy = this.enemies[i];
+      if (i < distances.length) {
+        enemy.home
+          .copy(origin)
+          .addScaledVector(this.poseTestForward, distances[i])
+          // Fan them slightly apart so none occludes another.
+          .addScaledVector(SIDE.crossVectors(this.poseTestForward, UP_AXIS).normalize(), (i - 1.5) * 0.9);
+        enemy.home.y = origin.y;
+        enemy.patrolTo.copy(enemy.home);
+        enemy.position.copy(enemy.home);
+        enemy.rig.root.position.copy(enemy.home);
+        enemy.state = 'alert';
+        enemy.rig.root.visible = true;
+      } else {
+        enemy.rig.root.visible = false;
+        enemy.state = 'dead';
+      }
+    }
   }
 
   setEnabled(enabled: boolean): void {
@@ -209,6 +249,11 @@ export class EnemyManager {
 
   update(dt: number, elapsed: number, playerEye: THREE.Vector3, playerAlive: boolean): void {
     if (!this.enabled) return;
+
+    if (this.poseTest) {
+      this.updatePoseTest(dt, elapsed, playerEye);
+      return;
+    }
     for (const enemy of this.enemies) {
       switch (enemy.state) {
         case 'dead':
@@ -218,6 +263,52 @@ export class EnemyManager {
           continue;
         default:
           this.updateAlive(enemy, dt, elapsed, playerEye, playerAlive);
+      }
+    }
+  }
+
+  /**
+   * Drives the four inspection hostiles through the rig's full pose range on a
+   * loop: idle -> moving -> aiming -> firing -> flinching -> dying -> reset.
+   */
+  private updatePoseTest(dt: number, elapsed: number, playerEye: THREE.Vector3): void {
+    const CYCLE = 12;
+    const phase = elapsed % CYCLE;
+    for (const enemy of this.enemies) {
+      if (enemy.rig.root.visible === false) continue;
+
+      // Always face the player so joints are seen from a consistent angle.
+      this.tmpVec.subVectors(playerEye, enemy.position);
+      enemy.facing = Math.atan2(this.tmpVec.x, this.tmpVec.z);
+      enemy.rig.root.rotation.y = enemy.facing;
+      enemy.rig.root.position.copy(enemy.position);
+
+      if (phase < 8) {
+        // 0-2 idle, 2-4 moving, 4-6 aiming, 6-8 firing.
+        enemy.state = phase < 2 ? 'idle' : 'alert';
+        if (phase >= 4) enemy.state = 'firing';
+        if (phase >= 6 && Math.floor(phase * 8) % 2 === 0) enemy.flinch = 0;
+        enemy.deathTimer = 0;
+        enemy.rig.root.rotation.x = 0;
+        enemy.rig.root.rotation.z = 0;
+        this.animate(enemy, dt, elapsed);
+      } else if (phase < 10) {
+        // Hit reactions.
+        enemy.state = 'firing';
+        if (enemy.flinch <= 0) {
+          enemy.flinch = ENEMY_CONFIG.flinchTime;
+          enemy.flinchDirection.set(Math.sin(elapsed * 3), 0, Math.cos(elapsed * 3)).normalize();
+        }
+        this.animate(enemy, dt, elapsed);
+      } else {
+        // Death topple.
+        enemy.deathTimer = (phase - 10) * 0.5;
+        const eased = 1 - Math.pow(1 - Math.min(1, enemy.deathTimer / 0.85), 3);
+        enemy.rig.root.rotation.x = eased * -1.42;
+        enemy.rig.root.rotation.z = eased * 0.3;
+        enemy.rig.leftArm.rotation.x = lerp(-1.05, -0.25, eased);
+        enemy.rig.rightArm.rotation.x = lerp(-1.05, -0.35, eased);
+        enemy.rig.torso.rotation.x = eased * 0.28;
       }
     }
   }
@@ -424,3 +515,6 @@ function dampAngle(current: number, target: number, rate: number, dt: number): n
   while (delta < -Math.PI) delta += Math.PI * 2;
   return current + delta * (1 - Math.exp(-rate * dt));
 }
+
+const SIDE = new THREE.Vector3();
+const UP_AXIS = new THREE.Vector3(0, 1, 0);

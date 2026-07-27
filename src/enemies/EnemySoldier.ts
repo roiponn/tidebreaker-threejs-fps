@@ -41,9 +41,15 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
     return g;
   };
 
-  const fatigue = mats.gunPolymer();
-  const gear = mats.gunRubber();
+  const fatigue = mats.soldierFatigue();
+  const gear = mats.soldierGear();
   const metal = mats.steelBare();
+
+  /** Non-uniformly scales a geometry in place (for squashed domes). */
+  const scaled = (g: THREE.BufferGeometry, x: number, y: number, z: number): THREE.BufferGeometry => {
+    g.scale(x, y, z);
+    return g;
+  };
 
   /** Merges a list of parts into one mesh to keep the draw call count down. */
   const meshFrom = (
@@ -77,6 +83,11 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
         // Drop pouches on the belt line.
         [keep(chamferBox(0.11, 0.14, 0.08, 0.02, 1)), trs(-0.17, -0.06, 0.02)],
         [keep(chamferBox(0.11, 0.14, 0.08, 0.02, 1)), trs(0.17, -0.06, 0.02)],
+        // TROUSER SKIRT: a flared block hanging below the belt that overlaps
+        // the top of BOTH thighs. The hips are the one joint a capsule cannot
+        // close on its own, because two bones share one parent volume; a piece
+        // of clothing that hangs over them is how real characters solve it.
+        [scaled(keep(new THREE.SphereGeometry(0.168, 12, 8)), 1.05, 0.62, 0.92), trs(0, -0.082, 0)],
       ],
       gear,
       'hips',
@@ -103,12 +114,42 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
         [keep(chamferBox(0.075, 0.12, 0.055, 0.012, 1)), trs(0.085, 0.05, 0.135)],
         // Radio on the left shoulder strap.
         [keep(chamferBox(0.06, 0.11, 0.045, 0.01, 1)), trs(-0.13, 0.25, 0.06)],
-        // Shoulder pads.
-        [keep(chamferBox(0.10, 0.09, 0.16, 0.025, 1)), trs(-0.19, 0.25, 0)],
-        [keep(chamferBox(0.10, 0.09, 0.16, 0.025, 1)), trs(0.19, 0.25, 0)],
       ],
       gear,
       'carrier',
+    ),
+  );
+
+  // SHOULDER + NECK COVERAGE, parented to the torso.
+  //
+  // A capsule cap closes the joint geometrically, but the shoulder is where a
+  // rigid rig reads worst because the arm swings through a large arc. These
+  // pieces belong to the TORSO, so they stay put while the arm rotates beneath
+  // them - exactly how a real pauldron and collar behave, and the standard way
+  // to hide a rigid shoulder.
+  torso.add(
+    meshFrom(
+      [
+        // Pauldrons: squashed domes draping over the deltoid.
+        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(-0.185, 0.248, 0)],
+        [scaled(keep(new THREE.SphereGeometry(0.098, 10, 7)), 1.0, 0.78, 1.15), trs(0.185, 0.248, 0)],
+        // Collar ring: closes the neck at every head angle.
+        [keep(new THREE.CylinderGeometry(0.072, 0.085, 0.075, 10)), trs(0, 0.30, 0)],
+      ],
+      gear,
+      'pauldrons',
+    ),
+  );
+  // Neck column. The head pivots at its top, and the sphere at that pivot means
+  // head rotation cannot open a seam.
+  torso.add(
+    meshFrom(
+      [
+        [keep(new THREE.CylinderGeometry(0.055, 0.058, 0.10, 8)), trs(0, 0.325, 0)],
+        [keep(new THREE.SphereGeometry(0.058, 8, 6)), trs(0, 0.36, 0)],
+      ],
+      fatigue,
+      'neck',
     ),
   );
   // Antenna: a thin vertical line that makes the silhouette instantly readable
@@ -149,30 +190,84 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   );
   void metal;
 
-  // --- arms: upper + forearm, posed in a low-ready weapon grip ---
+  /**
+   * THE JOINT RULE for this rigid-part rig.
+   *
+   * Every limb bone is a CAPSULE positioned so that its end-cap hemisphere
+   * centres sit exactly on the two joint pivots it spans. Rotating a bone about
+   * a pivot is then a rotation of a sphere about its own centre, which is
+   * geometrically invariant - so the joint physically cannot open a gap at any
+   * angle, and consecutive bones always share overlapping spherical volume.
+   *
+   * This is why the old rig failed: box limbs had FLAT ends at the pivots, so
+   * every degree of rotation swung a square corner away from its neighbour and
+   * opened a visible wedge. The fix is the shape, not the size - simply
+   * inflating the boxes until the gaps closed would have produced swollen,
+   * toy-like limbs.
+   *
+   * `bone(length, radius)` returns a capsule already offset so its TOP cap
+   * centre is the local origin (the parent joint) and its BOTTOM cap centre is
+   * at -length (the child joint).
+   */
+  const bone = (length: number, radius: number): THREE.BufferGeometry => {
+    const g = keep(new THREE.CapsuleGeometry(radius, length, 3, 8));
+    g.translate(0, -length / 2, 0);
+    return g;
+  };
+
+  // --- arms ---
+  const UPPER_ARM = 0.21;
+  const FOREARM = 0.20;
   const makeArm = (side: number): THREE.Group => {
     const arm = new THREE.Group();
-    arm.position.set(side * 0.21, 0.24, 0);
-    const upper = new THREE.Mesh(keep(chamferBox(0.085, 0.20, 0.09, 0.025, 1)), fatigue);
-    upper.position.y = -0.10;
-    upper.castShadow = true;
-    arm.add(upper);
-    const elbow = new THREE.Group();
-    elbow.position.y = -0.20;
-    arm.add(elbow);
-    // Forearm + glove in one mesh.
-    const fore = meshFrom(
-      [
-        [keep(chamferBox(0.075, 0.19, 0.08, 0.02, 1)), trs(0, -0.095, 0)],
-        [keep(chamferBox(0.07, 0.08, 0.075, 0.02, 1)), trs(0, -0.20, 0)],
-      ],
-      fatigue,
-      'forearm',
+    // Pivot pulled inboard and down so it sits INSIDE the deltoid mass rather
+    // than on the outer surface of the torso.
+    arm.position.set(side * 0.178, 0.232, 0);
+
+    // Upper arm + a deltoid bulge that overlaps the shoulder pad above it.
+    arm.add(
+      meshFrom(
+        [
+          [bone(UPPER_ARM, 0.051), trs(0, 0, 0)],
+          [keep(new THREE.SphereGeometry(0.058, 8, 6)), trs(0, -0.014, 0)],
+        ],
+        fatigue,
+        'upperArm',
+      ),
     );
-    elbow.add(fore);
-    // Pre-pose: elbows in, forearms forward.
-    arm.rotation.set(-1.05, side * -0.18, side * 0.22);
-    elbow.rotation.x = 0.55;
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -UPPER_ARM;
+    arm.add(elbow);
+
+    // Forearm (tapered by scaling the capsule) + glove at the wrist.
+    const foreGeo = bone(FOREARM, 0.044);
+    elbow.add(
+      meshFrom(
+        [
+          [foreGeo, trs(0, 0, 0)],
+          // Glove overlaps the forearm's lower cap, so the wrist never parts.
+          [keep(chamferBox(0.072, 0.085, 0.078, 0.022, 1)), trs(0, -FOREARM - 0.018, 0)],
+        ],
+        fatigue,
+        'forearm',
+      ),
+    );
+
+    // Pre-pose. The two arms are NOT mirrored: the right hand holds the grip
+    // and the left reaches across to the handguard, which is what makes the
+    // figure read as carrying a weapon rather than as a symmetrical doll.
+    // The Z term TUCKS the elbow toward the ribs. Positive Z swings the right
+    // arm outward, so it has to be negative there and positive on the left -
+    // getting this sign wrong is what left the figure standing with both arms
+    // splayed like a doll.
+    if (side > 0) {
+      arm.rotation.set(-1.02, -0.26, -0.22);
+      elbow.rotation.x = 0.70;
+    } else {
+      arm.rotation.set(-1.20, 0.50, 0.30);
+      elbow.rotation.x = 1.05;
+    }
     arm.userData.elbow = elbow;
     return arm;
   };
@@ -195,8 +290,10 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
       'enemyWeapon',
     ),
   );
-  weapon.position.set(0.16, -0.30, -0.16);
-  weapon.rotation.set(0.2, -0.28, 0.1);
+  // Mounted at the RIGHT HAND (the wrist is at -UPPER_ARM - FOREARM in arm
+  // space), not floating above the elbow as before.
+  weapon.position.set(0.02, -0.41, -0.10);
+  weapon.rotation.set(0.10, 0.22, 0.04);
   rightArm.add(weapon);
 
   const weaponMuzzle = new THREE.Object3D();
@@ -204,28 +301,51 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   weapon.add(weaponMuzzle);
 
   // --- legs ---
+  const THIGH = 0.37;
+  const SHIN = 0.37;
   const makeLeg = (side: number): THREE.Group => {
     const leg = new THREE.Group();
-    leg.position.set(side * 0.11, -0.08, 0);
-    const thigh = new THREE.Mesh(keep(chamferBox(0.125, 0.36, 0.14, 0.03, 1)), fatigue);
-    thigh.position.y = -0.18;
-    thigh.castShadow = true;
-    leg.add(thigh);
+    // Hip pivot raised into the pelvis mass so the trouser skirt above can
+    // overlap the thigh cap at every swing angle.
+    leg.position.set(side * 0.105, -0.055, 0);
+
+    leg.add(
+      meshFrom(
+        [
+          [bone(THIGH, 0.078), trs(0, 0, 0)],
+          // Upper-thigh bulge, hidden under the trouser skirt on the pelvis.
+          [keep(new THREE.SphereGeometry(0.081, 8, 6)), trs(0, -0.022, 0)],
+        ],
+        fatigue,
+        'thigh',
+      ),
+    );
+
     const knee = new THREE.Group();
-    knee.position.y = -0.36;
+    knee.position.y = -THIGH;
     leg.add(knee);
-    // Shin + boot + knee pad in one mesh.
+
     knee.add(
       meshFrom(
         [
-          [keep(chamferBox(0.11, 0.36, 0.12, 0.025, 1)), trs(0, -0.18, 0)],
-          [keep(chamferBox(0.12, 0.10, 0.24, 0.02, 1)), trs(0, -0.38, 0.04)],
-          [keep(chamferBox(0.11, 0.09, 0.05, 0.02, 1)), trs(0, -0.02, 0.08)],
+          [bone(SHIN, 0.064), trs(0, 0, 0)],
+          // Boot overlaps the shin's lower cap so the ankle stays closed.
+          [keep(chamferBox(0.115, 0.105, 0.235, 0.02, 1)), trs(0, -SHIN - 0.012, 0.045)],
         ],
         fatigue,
         'lowerLeg',
       ),
     );
+    // Knee pad is a separate GEAR-material piece straddling the pivot, so the
+    // joint reads as armoured rather than as two tubes meeting.
+    knee.add(
+      meshFrom(
+        [[keep(chamferBox(0.125, 0.125, 0.075, 0.028, 2)), trs(0, -0.012, 0.052)]],
+        gear,
+        'kneePad',
+      ),
+    );
+
     leg.userData.knee = knee;
     return leg;
   };

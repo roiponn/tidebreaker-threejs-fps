@@ -245,9 +245,19 @@ export type VisualConfig = typeof VISUAL_CONFIG;
 
 /** Mutable runtime mirror - the debug panel writes here, systems read here. */
 export type MutableVisual = {
-  -readonly [K in keyof VisualConfig]: { -readonly [P in keyof VisualConfig[K]]: VisualConfig[K][P] };
+  -readonly [K in keyof VisualConfig]: {
+    // `VisualConfig[K][P]` would keep the literal type from `as const`, so
+    // every runtime assignment would be a type error. Widen to the primitive.
+    -readonly [P in keyof VisualConfig[K]]: VisualConfig[K][P] extends number
+      ? number
+      : VisualConfig[K][P] extends boolean
+        ? boolean
+        : VisualConfig[K][P];
+  };
 };
 
 export function cloneVisualConfig(): MutableVisual {
-  return structuredClone(VISUAL_CONFIG) as MutableVisual;
+  // structuredClone keeps the literal types from `as const`; widening them here
+  // is what makes the runtime mirror actually mutable.
+  return structuredClone(VISUAL_CONFIG) as unknown as MutableVisual;
 }

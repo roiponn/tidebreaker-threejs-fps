@@ -129,7 +129,7 @@ export class WetGround {
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${GROUND_MASK}`)
         .replace(
           '#include <roughnessmap_fragment>',
-          '#include <roughnessmap_fragment>\n\t// Water roughness varies with the fine surface field and with local chop,\n\t// so a pool has calm mirror-like centres and duller, wind-ruffled edges\n\t// instead of being one flat mirror.\n\tfloat gViewDist = length( vViewPosition );\n\t// Roughness also grows with DISTANCE: a far water surface covers many\n\t// ripples per pixel so it is physically rougher at that scale, and a\n\t// mirror-smooth surface at a grazing angle aliases badly. It also softens\n\t// the abrupt boundary where the deck passes out from under the loading-bay\n\t// canopy and starts reflecting open sky instead of roof.\n\tfloat gWaterRough = clamp( 0.018 + gSurface * 0.075 + gChop * 1.6 + gViewDist * 0.0035, 0.012, 0.34 );\n\troughnessFactor = mix( roughnessFactor * ( 1.0 - uWetness * 0.45 ), gWaterRough, gPuddle );',
+          '#include <roughnessmap_fragment>\n\t// Water roughness varies with the fine surface field and with local chop,\n\t// so a pool has calm mirror-like centres and duller, wind-ruffled edges\n\t// instead of being one flat mirror.\n\tfloat gViewDist = length( vViewPosition );\n\t// Roughness also grows with DISTANCE: a far water surface covers many\n\t// ripples per pixel so it is physically rougher at that scale, and a\n\t// mirror-smooth surface at a grazing angle aliases badly. It also softens\n\t// the abrupt boundary where the deck passes out from under the loading-bay\n\t// canopy and starts reflecting open sky instead of roof.\n\tfloat gWaterRough = clamp( 0.018 + gSurface * 0.075 + gChop * 1.6 + gViewDist * 0.0035 + ( 1.0 - gDepthAmt ) * 0.16, 0.012, 0.40 );\n\troughnessFactor = mix( roughnessFactor * ( 1.0 - uWetness * 0.45 ), gWaterRough, gPuddle * mix( 0.55, 1.0, gDepthAmt ) );',
         )
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${GROUND_NORMAL}`)
         .replace('#include <opaque_fragment>', `${GROUND_REFLECTION}\n#include <opaque_fragment>`);
@@ -446,6 +446,8 @@ uniform vec4 uImpacts[ 8 ];
 uniform float uDebugMode;
 
 float gPuddle;
+/** 0 at the waterline, 1 in the deep centre of a pool. */
+float gDepthAmt;
 float gDamp;
 float gSurface;
 float gChop;
@@ -528,10 +530,24 @@ const GROUND_MASK = /* glsl */ `
   // coverage AND the value mipmaps converge to. Keeping the level near 0.5 is
   // exactly what makes puddle coverage distance-stable; wetness only nudges it.
   float gLevel = mix( 0.545, 0.495, uWetness );
+  // DRY ISLANDS. High points of the fine field poke back through the water, so
+  // a large pool is broken by patches of exposed deck instead of reading as one
+  // continuous sheet. This is the difference between "standing water in a yard"
+  // and "a designed platform".
+  float islands = smoothstep( 0.62, 0.80, gSmall.b * 0.6 + gBig.b * 0.4 );
+  gDepth -= islands * 0.075;
+
   // Threshold AFTER filtering -> crisp waterlines at every distance.
   gPuddle = smoothstep( gLevel, gLevel + 0.045, gDepth );
-  // Damp halo: a wider, softer band of merely-damp concrete around each pool.
-  gDamp = smoothstep( gLevel - 0.20, gLevel + 0.02, gDepth ) * uWetness;
+
+  // WATER DEPTH, as distinct from water PRESENCE. A pool is shallow at its rim
+  // and deep at its centre; driving the reflection from presence alone is what
+  // made the far edge of a pool read as a raised step, because the mirror
+  // switched on across a 4cm band.
+  gDepthAmt = smoothstep( gLevel + 0.01, gLevel + 0.17, gDepth );
+
+  // Damp halo: a wide, soft band of merely-damp concrete around each pool.
+  gDamp = smoothstep( gLevel - 0.22, gLevel + 0.02, gDepth ) * uWetness;
   gSurface = gBig.b * 0.6 + gSmall.b * 0.4;
 
   // Two crossing wave trains give directional chop; the rings add life.
@@ -550,7 +566,7 @@ const GROUND_NORMAL = /* glsl */ `
     // Replace the concrete normal with a water surface inside puddles.
     vec3 waterNormalWorld = normalize( vec3( -gRipple.x, 1.0, -gRipple.y ) );
     vec3 waterNormalView = normalize( ( viewMatrix * vec4( waterNormalWorld, 0.0 ) ).xyz );
-    normal = normalize( mix( normal, waterNormalView, gPuddle * 0.92 ) );
+    normal = normalize( mix( normal, waterNormalView, gPuddle * gDepthAmt * 0.92 ) );
   }
 `;
 
@@ -558,14 +574,19 @@ const GROUND_REFLECTION = /* glsl */ `
   {
     if ( uDebugMode > 0.5 ) {
       if ( uDebugMode < 1.5 ) outgoingLight = vec3( gPuddle );
-      else if ( uDebugMode < 2.5 ) outgoingLight = vec3( gDamp, gSurface, gChop * 8.0 );
+      else if ( uDebugMode < 2.5 ) outgoingLight = vec3( gDepthAmt, gDamp, gChop * 8.0 );
       else outgoingLight = texture2D( uReflection, gl_FragCoord.xy / uResolution ).rgb;
       diffuseColor.a = 1.0;
     } else {
     // Damp concrete outside the puddles: darker albedo, tighter specular.
     outgoingLight *= mix( 1.0, 0.72, gDamp * 0.8 );
+    // SILT at the waterline. Where water is present but shallow, sediment has
+    // settled - a warm-grey band that follows the pool outline and keeps the
+    // edge from reading as a clean cut in the surface.
+    float rim = gPuddle * ( 1.0 - gDepthAmt );
+    outgoingLight = mix( outgoingLight, outgoingLight * vec3( 1.12, 1.05, 0.92 ), rim * 0.5 );
 
-    if ( uHasReflection > 0.5 && gPuddle > 0.002 ) {
+    if ( uHasReflection > 0.5 && gPuddle * gDepthAmt > 0.002 ) {
       // Screen-space sample: exact for a planar mirror rendered with the
       // mirrored camera. uResolution is the MAIN framebuffer size (what
       // gl_FragCoord is measured in), not the reflection target size - the
@@ -574,7 +595,7 @@ const GROUND_REFLECTION = /* glsl */ `
       vec2 screenUv = gl_FragCoord.xy / uResolution;
       // Distortion scales with puddle depth: a shallow film barely bends the
       // image, a deep pool breaks it up.
-      screenUv += gRipple * ( 0.35 + gPuddle * 0.75 );
+      screenUv += gRipple * ( 0.35 + gDepthAmt * 0.75 );
       screenUv = clamp( screenUv, vec2( 0.002 ), vec2( 0.998 ) );
       vec3 reflectionColor = texture2D( uReflection, screenUv ).rgb;
 
@@ -587,7 +608,7 @@ const GROUND_REFLECTION = /* glsl */ `
       // keeps near pools legible while distant ones still go near-mirror.
       vec3 viewDir = normalize( vViewPosition );
       float fresnel = pow( 1.0 - clamp( dot( viewDir, normal ), 0.0, 1.0 ), 4.0 );
-      float strength = uReflectionStrength * gPuddle * mix( 0.38, 1.0, fresnel );
+      float strength = uReflectionStrength * gPuddle * gDepthAmt * mix( 0.38, 1.0, fresnel );
       outgoingLight = mix( outgoingLight, reflectionColor, clamp( strength, 0.0, 0.94 ) );
     }
     }
