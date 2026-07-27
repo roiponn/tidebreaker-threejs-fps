@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LAYER } from '@/core/Layers';
 import { Rng } from '@/core/Rng';
-import { clamp01, damp, fbm1 } from '@/core/MathUtils';
+import { clamp01, fbm1 } from '@/core/MathUtils';
 import type { MaterialLibrary } from '@/materials/MaterialLibrary';
 import type { MutableVisual } from '@/config/visual';
 import type { QualitySettings } from '@/config/quality';
@@ -29,6 +29,18 @@ interface Flicker {
   emissive: THREE.Mesh | null;
   cone: THREE.Mesh | null;
   baseIntensity: number;
+  /**
+   * Emissive intensity captured ONCE when the fixture is registered.
+   *
+   * The previous code read a baseline off `material.userData` *after* it had
+   * already written this frame's value to the same material, so the baseline
+   * drifted; and because emissive materials are cached and shared between
+   * fixtures, several flickers were writing to one material and capturing each
+   * other's output. Both faults compounded over a long session. The base value
+   * now lives here, per fixture, and each flickering fixture owns a cloned
+   * material so nothing is shared.
+   */
+  baseEmissive: number;
   /** Per-lamp noise offset so no two flicker in sync. */
   phase: number;
   /** 0 = healthy, 1 = failing ballast. */
@@ -58,6 +70,7 @@ export class Practicals {
   private rng = new Rng(0x10a11a);
   private disposables: Array<{ dispose(): void }> = [];
   private lightCount = 0;
+  private masterScale = 1;
 
   constructor(
     private readonly mats: MaterialLibrary,
@@ -153,16 +166,7 @@ export class Practicals {
       this.group.add(cone);
     }
 
-    this.flickers.push({
-      light,
-      emissive: lens,
-      cone,
-      baseIntensity: light.intensity,
-      phase: this.rng.range(0, 100),
-      instability: options.instability ?? 0,
-      destroyed: false,
-      destroyTimer: 0,
-    });
+    this.registerFlicker(light, lens, cone, options.instability ?? 0);
     return light;
   }
 
@@ -241,16 +245,7 @@ export class Practicals {
 
     this.disposables.push(cord.geometry, shadeGeo, bulb.geometry);
     this.hanging.push({ group, light, angleX: 0, angleZ: 0, velX: 0, velZ: 0 });
-    this.flickers.push({
-      light,
-      emissive: bulb,
-      cone: null,
-      baseIntensity: light.intensity,
-      phase: this.rng.range(0, 100),
-      instability: this.rng.chance(0.4) ? this.rng.range(0.3, 0.8) : 0,
-      destroyed: false,
-      destroyTimer: 0,
-    });
+    this.registerFlicker(light, bulb, null, this.rng.chance(0.4) ? this.rng.range(0.3, 0.8) : 0);
   }
 
   /**
@@ -287,14 +282,39 @@ export class Practicals {
       light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
     }
 
+    // Fluorescents are the classic failing fixture; most of these stutter.
+    this.registerFlicker(light, mesh, null, this.rng.chance(0.55) ? this.rng.range(0.4, 1) : 0);
+  }
+
+  /**
+   * Registers a fixture with the flicker system.
+   * Clones the emissive material so this fixture owns it outright - the cached
+   * materials are shared by every fixture of the same colour, and per-fixture
+   * animation of a shared material is what caused values to accumulate.
+   */
+  private registerFlicker(
+    light: THREE.Light,
+    emissive: THREE.Mesh | null,
+    cone: THREE.Mesh | null,
+    instability: number,
+  ): void {
+    let baseEmissive = 1;
+    if (emissive) {
+      const shared = emissive.material as THREE.MeshStandardMaterial;
+      const own = shared.clone();
+      own.name = `${shared.name}_own`;
+      emissive.material = own;
+      this.disposables.push(own);
+      baseEmissive = own.emissiveIntensity;
+    }
     this.flickers.push({
       light,
-      emissive: mesh,
-      cone: null,
+      emissive,
+      cone,
       baseIntensity: light.intensity,
+      baseEmissive,
       phase: this.rng.range(0, 100),
-      // Fluorescents are the classic failing fixture; most of these stutter.
-      instability: this.rng.chance(0.55) ? this.rng.range(0.4, 1) : 0,
+      instability,
       destroyed: false,
       destroyTimer: 0,
     });
@@ -352,27 +372,27 @@ export class Practicals {
   update(dt: number, elapsed: number): void {
     // --- flicker ---
     for (const f of this.flickers) {
-      let intensity = f.baseIntensity;
+      let intensity = f.baseIntensity * this.masterScale;
       if (f.destroyed) {
         // Brief arc-flash as the fixture dies, then it stays dark.
         f.destroyTimer += dt;
         const t = f.destroyTimer;
-        intensity = t < 0.16 ? f.baseIntensity * (2.4 * Math.sin(t * 90) ** 2) : 0;
+        intensity = t < 0.16 ? f.baseIntensity * this.masterScale * (2.4 * Math.sin(t * 90) ** 2) : 0;
       } else if (f.instability > 0) {
         const n = fbm1(elapsed * 7 + f.phase, 3);
         // Mostly stable with occasional dropouts, not a strobe.
         const dip = n < -0.42 * (1 - f.instability * 0.5) ? this.rng.range(0.05, 0.4) : 1;
-        intensity = f.baseIntensity * (0.88 + n * 0.12) * dip;
+        intensity = f.baseIntensity * this.masterScale * (0.88 + n * 0.12) * dip;
       }
       f.light.intensity = intensity;
+      // Always derived from the immutable base values, never from the current
+      // (already animated) ones - that is what stops flicker accumulating.
+      const ratio = intensity / Math.max(f.baseIntensity, 0.001);
       if (f.emissive) {
-        const mat = f.emissive.material as THREE.MeshStandardMaterial;
-        mat.emissiveIntensity = (intensity / Math.max(f.baseIntensity, 0.001)) * (mat.userData.baseEmissive ?? 1);
-        if (mat.userData.baseEmissive === undefined) mat.userData.baseEmissive = mat.emissiveIntensity;
+        (f.emissive.material as THREE.MeshStandardMaterial).emissiveIntensity = f.baseEmissive * ratio;
       }
       if (f.cone) {
-        (f.cone.material as THREE.ShaderMaterial).uniforms.uIntensity.value =
-          intensity / Math.max(f.baseIntensity, 0.001);
+        (f.cone.material as THREE.ShaderMaterial).uniforms.uIntensity.value = ratio;
       }
     }
 
@@ -397,11 +417,14 @@ export class Practicals {
     for (const mat of this.coneMaterials) mat.uniforms.uTime.value = elapsed;
   }
 
-  /** Fades every practical for the intro power-up sequence. */
-  setMasterScale(scale: number, dt: number): void {
-    for (const f of this.flickers) {
-      f.light.intensity = damp(f.light.intensity, f.baseIntensity * scale, 6, dt);
-    }
+  /**
+   * Fades every practical (intro power-up, end sequence).
+   * Stored as a multiplier the flicker loop applies, rather than written
+   * directly onto the lights - two systems writing the same property is
+   * exactly how the accumulation bug happened in the first place.
+   */
+  setMasterScale(scale: number): void {
+    this.masterScale = scale;
   }
 
   dispose(): void {

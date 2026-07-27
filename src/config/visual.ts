@@ -96,7 +96,7 @@ export const VISUAL_CONFIG = {
      * practical is lit by this and nothing else. It must be clearly cool, or
      * shadows go brown and the whole frame collapses into one hue.
      */
-    skyColor: 0x5b88c4,
+    skyColor: 0x6d92c0,
     /** Bounce from the ground. Wet asphalt bounces cool, not warm brown. */
     groundColor: 0x18222f,
     intensity: 1.45,
@@ -150,7 +150,7 @@ export const VISUAL_CONFIG = {
      *
      * 6500 = neutral. Lower = cooler image. Tint shifts green(-) / magenta(+).
      */
-    whiteBalanceK: 4600,
+    whiteBalanceK: 5150,
     whiteBalanceTint: 0.04,
     /** Lift / gamma / gain style trim applied after tonemapping. */
     liftShadows: 0x0c1420,
@@ -159,7 +159,7 @@ export const VISUAL_CONFIG = {
     saturation: 1.16,
     /** Teal shadows / amber highlights split-tone, kept restrained. */
     splitToneShadow: 0x1d4f74,
-    splitToneHighlight: 0xffd0a0,
+    splitToneHighlight: 0xffc48c,
     splitToneBalance: 0.3,
     vignette: 0.26,
     vignetteSoftness: 0.55,
@@ -205,18 +205,18 @@ export const VISUAL_CONFIG = {
    */
   practicals: {
     /** High-pressure sodium: yard masts, canyon masts, catwalk lamp. */
-    floodColorWarm: 0xffb257,
+    floodColorWarm: 0xff9c33,
     /** Mercury/LED: warehouse facade, pier head, blockhouse. */
     floodColorCool: 0xbfd8ff,
-    floodColor: 0xffb257,
-    floodIntensity: 620,
+    floodColor: 0xff9c33,
+    floodIntensity: 820,
     floodDistance: 38,
     floodAngle: 0.52,
     floodPenumbra: 0.45,
     /** Volumetric cone mesh opacity - fakes light shafts cheaply. */
     shaftOpacity: 0.115,
-    beaconColor: 0xff4a20,
-    beaconIntensity: 90,
+    beaconColor: 0xff3d16,
+    beaconIntensity: 140,
     beaconSpeed: 1.9,
     stripColor: 0xb8dcff,
     stripIntensity: 26,
