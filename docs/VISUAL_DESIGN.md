@@ -37,7 +37,28 @@ enemy in the shadow of a container has to be findable. Three mechanisms guarante
 
 If you darken the scene, you must not break all three.
 
-### 2.3 Practicals are the real light source
+### 2.3 Two light families
+
+The practicals are split into **two colour temperatures on purpose**:
+
+- **High-pressure sodium** (`practicals.floodColorWarm`) lights the container canyon and the yard.
+- **Mercury / LED** (`practicals.floodColorCool`) lights the warehouse facade, the pier head and
+  the interior strips.
+
+The player physically crosses between them as they advance up the berth. This is what produces
+warm/cool contrast *in depth* rather than a single colour cast, and it is the main reason the
+frame has colour separation at all. Making every practical the same temperature is what flattened
+the earlier palette.
+
+### 2.4 White balance
+
+`grade.whiteBalanceK` is the temperature the virtual camera is balanced FOR, applied in
+scene-referred linear space before the tonemap. Balancing for a warm illuminant (4600K) tells the
+camera "the light here is orange", so it cools the world — and anything genuinely warm, the sodium
+lamps and the muzzle flash, then reads as warm against it. This is the standard night-exterior
+trick and it is the single most powerful control over the warm/cool balance.
+
+### 2.5 Practicals are the real light source
 
 At `timeOfDay = 0.42` the sun is a weak cool rim and the **floodlights do most of the work**.
 Seven spot lights, all with a modelled fixture — mast, arm, brace, housing, cowl — so every pool

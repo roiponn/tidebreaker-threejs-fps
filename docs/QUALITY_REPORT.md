@@ -57,42 +57,71 @@ These were all real, all found by looking at rendered frames:
 
 Ranked by how much it costs the impression. **Nothing here is fixed.**
 
-### P1 — The palette is still narrow
+### P1 — Palette (FIXED)
 
-**Problem.** Even after moving to a dusk/night midpoint, mid-range frames sit in a warm
-orange-brown band. Containers, deck and warehouse all land close together in hue.
-**Cause.** One warm key + one warm practical colour + a warm-dominant PMREM probe. The cool
-hemisphere fill is present but too low-contrast to separate planes.
-**Priority.** High — it is the first thing a viewer notices.
-**Fix.** Give the practicals two colour families (sodium amber for the yard, mercury cyan-white
-for the warehouse and pier) so the player crosses between colour zones. Push
-`ambient.skyColor` further toward cyan and raise `fog.aerialStrength`.
-**Files.** `src/config/visual.ts`, `src/environment/HarborLevel.ts` (per-light colour arguments).
-**Verify.** Screenshot at x≈10, 30 and 50; the three should not be the same hue.
+**Was.** Every mid-range frame sat in one warm orange-brown band. Containers, deck, sky and metal
+all landed in the same hue.
 
-### P2 — Puddles and planar reflections are not reading
+**Root cause.** Four things compounding: a saturated warm key; a sky whose warm horizon band
+wrapped the full 360 degrees; a PMREM environment probe generated from that sky, so every
+reflective surface was re-tinted orange; and every practical light at the same colour temperature.
+Nothing cool was left to contrast against, so the frame had no colour depth.
 
-**Problem.** The apron looks damp, but the mirror-like puddles and the reflected floodlights that
-justify the whole wet-ground system are barely visible in captured frames.
-**Cause.** Suspected: the puddle mask threshold `(depth - 0.52) * 6.5` leaves too little coverage
-at `uWetness = 0.82`, and the fresnel term suppresses reflection at the near-vertical angles a
-standing player has over nearby ground.
-**Priority.** High — this is the single largest visual investment in the project.
-**Fix.** Lower the mask threshold, widen the puddle bodies, and raise the fresnel floor from 0.18
-to ~0.3 so nearby puddles still show something. Add a debug view that outputs the mask directly.
-**Files.** `src/environment/WetGround.ts` (`buildPuddleMask`, `GROUND_REFLECTION`).
-**Verify.** Stand 3 m from a floodlight pool; its reflection should be visible in the deck.
+**Fixed by.** Two light families (sodium yard/canyon against mercury warehouse/pier, so the player
+crosses a warm/cool boundary as they advance); a real white-balance control applied pre-tonemap;
+the sky's warm band anchored to the sun instead of wrapping the horizon ring; a desaturated key; a
+cooler and stronger hemisphere fill; and a cool ground bounce instead of warm brown.
 
-### P3 — Sky lacks structure
+**What is still not right.** The image now leans slightly *cool* overall — the white balance
+(4600K) is carrying a lot of the load. Trading some of it for more warm practical coverage in the
+canyon would be a better balance of sources than a global correction.
 
-**Problem.** The dome is a smooth gradient; the cloud layer barely registers.
-**Cause.** Coverage 0.6 with `density *= smoothstep(-0.02, 0.22, h)` kills clouds near the
-horizon, which is most of what the player sees.
-**Priority.** Medium-high — the sky occupies a third of most frames.
-**Fix.** Extend clouds below h=0.22 with a compressed vertical scale, and raise the contrast
-between lit and shadowed cloud.
-**Files.** `src/shaders/SkyShader.ts`.
-**Verify.** Look up and toward the horizon; both should show cloud form.
+### P2 — Puddles and reflections (FIXED, with a caveat)
+
+**Was.** The apron looked damp, but the pools and reflected lights that justify the whole
+wet-ground system were not visible, and a hard horizontal line ran across the deck.
+
+**Root cause — a genuine bug, not a tuning problem.** The mask texture stored a *pre-thresholded*
+0/1 puddle mask. Mipmaps average, so at distance every texel became the local coverage fraction —
+"40% puddle everywhere" — while near ground kept crisp pools. The mip crossover between the two
+regimes is what drew the line.
+
+Storing the smooth field and thresholding in the shader fixes only half of it: mipmaps converge
+toward the field's *mean*, so a threshold above the mean makes distant coverage collapse and one
+below makes it flood — the line just moves. The field is now **histogram-normalised so the
+authored coverage percentile sits exactly on 0.5**, which is the value mips converge to. Coverage
+is then stable from the player's boots to the far end of the berth.
+
+A second, smaller bug: combining two mask scales by weighted average collapses the combined
+variance (a sum of independent variables clusters more tightly than either), making coverage
+hypersensitive to the threshold. The second scale is now a perturbation of one normalised field.
+
+Also fixed: below-water geometry — the 900m sea plane at y = -1.35 — was being mirrored up into
+the reflection and filling it with flat water colour (now clipped out with a global clip plane);
+the reflection target had a hardcoded 16:9 shape regardless of viewport; and the fresnel floor was
+so low (0.18) that pools around the player's own feet were effectively dry.
+
+**What is still not right.** At the spawn point the near field is still one large continuous pool
+whose far edge reads as a soft horizontal step. It is now a real pool boundary rather than a
+filtering artefact, but the opening frame would be stronger with more broken water there.
+
+### P3 — Sky and horizon (FIXED)
+
+**Was.** A smooth gradient with no cloud structure, meeting the distant scenery at a visible line.
+
+**Root cause.** The single cloud deck was multiplied by `smoothstep(-0.02, 0.22, h)` — cloud was
+deleted below 22 degrees of elevation, which is exactly the band a first-person player spends all
+their time looking at. What remained was the bare gradient.
+
+**Fixed by.** Two cloud decks at different virtual altitudes so they parallax against each other
+when the player turns, both running to the horizon and compressed into layered strata as they
+approach it; a directional departing-storm mass so the sky has an event and a direction; a
+four-stop gradient; and a haze band painted with the scene's own fog colour so the dome, the
+skyline and the sea dissolve into one atmosphere.
+
+**Cost.** The sky became the most expensive shader in the scene. It is now drawn last in the
+opaque pass — it had been drawn first, shading every pixel before being fully overdrawn — and its
+noise octaves were halved.
 
 ### P4 — Enemies are crude at close range
 
@@ -105,16 +134,14 @@ with overlapping gear (shoulder pads already do this; hips and knees do not).
 **Files.** `src/enemies/EnemySoldier.ts`.
 **Verify.** Walk to 3 m from a hostile and orbit.
 
-### P5 — Weapon materials are flat in shadow
+### P5 — Weapon flat in shadow (FIXED)
 
-**Problem.** Under the canopy the rifle is a near-black silhouette with little internal form.
-**Cause.** Correct PBR behaviour (it *is* in shadow) but bad presentation — real games cheat this
-with a dedicated view-model light.
-**Priority.** Medium.
-**Fix.** Add one low-intensity light on the `VIEWMODEL` layer only, keyed from the camera. It
-costs one light and does not touch the world.
-**Files.** `src/scene/Lighting.ts`, `src/core/Layers.ts`.
-**Verify.** Compare the rifle under the canopy and in a floodlit pool; both should show form.
+**Was.** Under the canopy the rifle was a near-black silhouette with no internal form.
+**Cause.** Correct PBR behaviour — it genuinely is in shadow — but bad presentation. Every
+first-person game cheats this the same way.
+**Fixed by.** One directional light confined to the `VIEWMODEL` layer, rigged up-and-left of the
+lens. It cannot touch world lighting and costs one light over a few thousand pixels. Verified: the
+receiver, rail and handguard now read as separate planes at the spawn point.
 
 ### P6 — Explosion readability, after the over-brightness fix
 
@@ -147,30 +174,40 @@ drift toward zero over a long session.
 
 ---
 
-## 3. Honest scoring
+## 3. Before/after comparison, same camera
 
-Self-assessment against a modern AAA military shooter. No reference material was supplied, so
-this is judged from memory of the genre's standards, **not** from a side-by-side comparison.
+Compared from the identical viewpoint (mission start, standing, looking east down the berth) with
+the HUD hidden, before and after the P1/P2/P3 work.
 
-| Criterion | /10 | Note |
-| --- | --- | --- |
-| Composition | 7 | Layout, sight lines and the framed opening work |
-| Lighting | 6 | Motivated and readable; palette too narrow (P1) |
-| Materials | 6 | Real roughness/metalness separation; texel density inconsistent up close |
-| Environment density | 7 | Genuinely layered; nothing is a bare box |
-| Sense of scale | 7 | Real container/crane/warehouse dimensions |
-| Weapon presentation | 5.5 | Good silhouette and animation; flat in shadow (P5) |
-| Effects | 5 | Systems are thorough but unproven on screen (P6) |
-| Atmosphere | 7 | Height fog + aerial perspective carry it |
-| Readability | 7 | IR strobes and the ambient floor do their job |
-| Consistency | 6 | The view-model is noticeably higher-fidelity than the enemies |
-| Motion quality | 6.5 | Movement and recoil have weight; enemy animation is crude |
-| First impression | 6.5 | Reads as a real place; not yet as a real product |
+| Criterion | Before | After | What actually changed |
+| --- | --- | --- | --- |
+| First impression | 6.5 | **7.5** | The frame now has a subject (warm lit yard) inside a cool frame, instead of one orange wash |
+| Colour depth | 4 | **7.5** | Two light families + white balance + cool fill. Warm and cool now sit against each other in depth |
+| Atmosphere | 7 | **8** | Haze band ties dome, skyline and sea together; the join is gone |
+| Reflection presence | 3 | **7.5** | Pools are legible, mirror the containers and the sodium lamps, and distort with the ripples |
+| Cloud / horizon naturalness | 3 | **7.5** | Two parallaxing decks, layered strata into the horizon, a directional storm mass |
+| Composition | 7 | 7 | Unchanged — the layout was never the problem |
+| Materials | 6 | **6.5** | Cooler ambient separates metal from concrete better; texel density unchanged |
+| Environment density | 7 | 7 | Unchanged |
+| Sense of scale | 7 | **7.5** | The cloud decks and haze band add a legible distance ladder |
+| Weapon presentation | 5.5 | **7** | The view-model light restores form in shadow (P5) |
+| Effects | 5 | **6** | Verified on screen this pass: impacts, decals, casings, explosions |
+| Readability | 7 | **7.5** | Cool ambient reads shadow detail better than the old brown |
+| Consistency | 6 | **6.5** | The view-model is still noticeably ahead of the enemies |
+| Motion quality | 6.5 | 6.5 | Unchanged |
+| Movement stability | — | **7** | Puddle coverage is now distance-stable, so the deck no longer changes character as the player walks |
 
-**Overall: roughly 6.4/10 against the genre standard.** It is a credible vertical slice with
-correct fundamentals and a defensible architecture. It is not mistakable for a shipped AAA title.
+**Overall: 6.4 → 7.2 / 10 against the genre standard.**
 
----
+The score moved because the image measurably changed, not to record effort. Three of the four
+largest complaints — no colour depth, no reflection presence, no sky structure — are resolved and
+visible in a still frame. What holds it below ~8 is unchanged: the enemies are crude close up, the
+texel density is inconsistent, and there is no LOD or occlusion strategy.
+
+Caveats on this comparison, stated plainly:
+- it was done by me from before/after captures at one viewpoint, not blind, and not against any
+  reference material (none was provided);
+- the captures are at 800x967 in the development browser, not at 1080p on target hardware.
 
 ## 4. Limits I could not get past in this environment
 
@@ -186,6 +223,13 @@ Stated plainly rather than papered over:
    I removed two plausible causes (odd-sized render targets, composite writing straight to the
    default framebuffer) and the inversion persisted, which points at the host GPU rather than the
    code. On real hardware the preset ordering should be normal, but I could not confirm it.
+
+   The same instability makes the *cost* of this visual pass unmeasurable here: the identical build
+   reported 1 fps and 29 fps minutes apart. What can be stated is that draw calls (565), triangles
+   (269k) and active lights (17) are unchanged by the visual work, and that the two new shader
+   costs were addressed directly — the sky is drawn last in the opaque pass rather than first and
+   its octave count was halved, and the wet ground adds two texture fetches. **The net frame-time
+   effect on target hardware is unverified.**
 
 3. **Pointer lock is refused in this browser**, so the game had to be driven with synthetic
    events. Sustained play — enemy return fire, taking damage, dying, completing the mission — was

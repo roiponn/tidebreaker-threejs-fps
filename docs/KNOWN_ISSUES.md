@@ -6,11 +6,11 @@ Ordered by severity. Nothing here is fixed; this is the honest defect list.
 
 | # | Issue | Severity | Where |
 | --- | --- | --- | --- |
-| V1 | Palette is narrow — mid-range frames sit in one warm hue band | High | `config/visual.ts`, practical colours |
-| V2 | Puddle reflections barely visible despite a full planar-reflection system | High | `environment/WetGround.ts` |
-| V3 | Cloud layer does not read near the horizon, where most of the sky is seen | Medium-high | `shaders/SkyShader.ts` |
+| V1 | FIXED. Palette now leans slightly cool overall; the white balance carries more of the correction than the practical mix does | Low | `config/visual.ts` |
+| V2 | FIXED. Remaining: the spawn point sits in one large pool whose far edge reads as a soft horizontal step | Medium | `environment/WetGround.ts` |
+| V3 | FIXED. Two parallaxing cloud decks plus a fog-coloured haze band | — | `shaders/SkyShader.ts` |
 | V4 | Rigid enemy joints separate visibly under ~8 m | Medium | `enemies/EnemySoldier.ts` |
-| V5 | Weapon is a near-black silhouette in shadow (no view-model light) | Medium | `scene/Lighting.ts` |
+| V5 | FIXED. Dedicated VIEWMODEL-layer key light | — | `scene/Lighting.ts` |
 | V6 | Decals are offset quads, not projected. Corrugated cladding needs a 3.8cm offset to stay visible above the ribs, which makes holes float slightly when viewed edge-on | Medium | `effects/DecalSystem.ts` |
 | V7 | Motion blur has no velocity buffer; moving objects do not blur, only the camera | Low | `shaders/CompositeShader.ts` |
 | V8 | Emissive flicker baseline is captured after modification, so flickering fixtures can dim over a long session | Low | `environment/Practicals.ts` |
@@ -20,7 +20,8 @@ Ordered by severity. Nothing here is fixed; this is the honest defect list.
 
 | # | Issue | Severity | Where |
 | --- | --- | --- | --- |
-| P1 | **60 fps @ 1080p is unverified.** Only a virtualised GPU was available | High (unknown) | — |
+| P1 | **60 fps @ 1080p is unverified.** Only a virtualised GPU was available, and it reported 1 fps and 29 fps for the identical build minutes apart | High (unknown) | — |
+| P1b | The visual pass added real fragment cost (two cloud decks, an extra mask fetch). Mitigated by drawing the sky last and halving its octaves, but the net effect is unmeasured | Medium (unknown) | `shaders/SkyShader.ts`, `environment/WetGround.ts` |
 | P2 | The Performance preset measured *slower* than Cinematic on the dev machine; cause not isolated | High (unknown) | `config/quality.ts` |
 | P3 | Zone-based geometry merging defeats per-object frustum culling | Medium | `environment/LevelBuilder.ts` |
 | P4 | 17 forward lights is still high for a forward renderer | Medium | `environment/Practicals.ts` |

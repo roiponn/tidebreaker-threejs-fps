@@ -22,7 +22,8 @@
       "Bash(git commit -q -m 'fix\\(vfx,materials\\): explosion over-brightness, decals on ribbed surfaces, container noise *)",
       "Bash(sed -n '/^const GROUND_MASK/,/^`;/p' src/environment/WetGround.ts)",
       "Bash(sed -n '/^const GROUND_REFLECTION/,/^`;/p' src/environment/WetGround.ts)",
-      "Bash(git commit -q -m 'feat\\(visual\\): fix the top three quality items - palette, puddles, sky *)"
+      "Bash(git commit -q -m 'feat\\(visual\\): fix the top three quality items - palette, puddles, sky *)",
+      "Bash(git commit -q -m 'docs: re-evaluate after the P1/P2/P3 visual pass *)"
     ]
   }
 }
