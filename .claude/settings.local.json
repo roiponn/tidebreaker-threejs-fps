@@ -10,7 +10,8 @@
       "Bash(git add *)",
       "Bash(git commit -q -m 'feat\\(level\\): BERTH 7 harbour - layout, props, practicals, wet ground, distant scenery *)",
       "Bash(git commit -q -m 'feat\\(player,weapon\\): FPS controller, layered view camera and the MK-7 VESPER *)",
-      "Bash(git commit -q -m 'feat\\(vfx\\): instanced particles, decals, tracers, casings and explosions *)"
+      "Bash(git commit -q -m 'feat\\(vfx\\): instanced particles, decals, tracers, casings and explosions *)",
+      "Bash(git commit -q -m 'feat\\(enemies,audio\\): soldiers, hitscan ballistics, shootable drums, synth audio *)"
     ]
   }
 }
