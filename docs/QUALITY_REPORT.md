@@ -433,10 +433,10 @@ thirds of the walk was quiet. Now 9:
 
 | Zone | Was | Now |
 | --- | --- | --- |
-| Bay mouth | 0 | **2** (new; first contact before the opening shot is over) |
+| Bay mouth / canyon approaches | 0 | **3** (one per route east, spread in depth) |
 | Canyon | 3 | 2 |
 | Yard | 6 (4 ground + 2 catwalk) | 3 (2 ground + 1 catwalk) |
-| Pier head | 2 | 2 |
+| Pier head | 2 | **3** (one beyond the extraction pad) |
 
 The catwalk hostile is kept so the "look up mid-fight" beat survives, and both pier-head hostiles
 are kept so the finale still has a shape.
@@ -497,6 +497,33 @@ f1 → r0 → r0 → a12 → f12 → f11 … f1 → r0 → r0 → f12
 The reload *pose* was inspected at 2 m with `?posetest=reload`. It reads as intended for a rigid rig;
 it is not a hand-animated magazine change and there is no magazine prop that actually leaves the
 weapon.
+
+### Hold fire until the player is in the fight (player request)
+
+Reported: the player was being shot before they could move. Making hostiles engage on sight (the
+previous change) meant the two at the bay mouth acquired the player during the **intro sweep** -
+while the player is frozen and the camera is still flying - so the condition bar was already
+dropping on the first frame the player could act on.
+
+`EnemyManager.update` now takes an `engage` flag that gates activation-by-progress,
+activation-by-sight and firing alike. `Game` latches it the moment the mission is active *and* the
+player does something: moves, aims or shoots. A 4-second fallback covers a player who deliberately
+stands still, so the encounter cannot be stalled indefinitely. The latch resets on restart.
+
+Verified with `?enemytrace=1` plus the health bar's transform:
+
+| | Result |
+| --- | --- |
+| Whole intro | all 10 hostiles `i12` (idle, full magazine), health `scaleX(1)` throughout |
+| First frame of movement in `active` | the two bay-mouth hostiles go to `f12` and engage |
+
+Previously two were already at `f` with a draining magazine before the intro finished.
+
+A tenth hostile was also added beyond the extraction pad at (57.0, −2.4), between the player and
+the objective. **Its footing is verified against the level geometry** — the pad spans x 49.8–56.2,
+the blockhouses occupy z 2.5–8.5 and z −11.5–−6.5, and the back wall is at x 61, so the spawn sits
+in clear deck between them — **but it has not been observed in play.** Reaching it means surviving a
+58 m run, and this browser runs the page at ~4 fps whenever it is being scripted.
 
 ### P16 — The view-model responded to window resizes differently from the world (FIXED)
 

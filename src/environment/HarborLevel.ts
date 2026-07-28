@@ -838,7 +838,7 @@ export class HarborLevel {
   // ------------------------------------------------------------------
 
   /**
-   * Encounter layout: 9 hostiles.
+   * Encounter layout: 10 hostiles.
    *
    * The garrison used to be 11 and weighted toward the far end - 6 of them in
    * the yard alone - so the fight got denser exactly as the player was running
@@ -895,9 +895,11 @@ export class HarborLevel {
     // movement the player is meant to track.
     spawn(36.2, 6.0, 36.2, 0.5, 24, 5.24, true);
 
-    // Pier head: the last stand at the objective.
+    // Pier head: the last stand at the objective. The third stands beyond the
+    // extraction pad itself, between the player and the thing they came for.
     spawn(50.5, -5.4, 51.3, -4.4, 42);
     spawn(54.5, 2.6, 53.6, 1.9, 44);
+    spawn(57.0, -2.4, 56.1, -1.6, 46);
   }
 
   // ------------------------------------------------------------------

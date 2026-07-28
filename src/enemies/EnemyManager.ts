@@ -337,7 +337,20 @@ export class EnemyManager {
   // Frame
   // ------------------------------------------------------------------
 
-  update(dt: number, elapsed: number, playerEye: THREE.Vector3, playerAlive: boolean): void {
+  /**
+   * @param engage  False while the player is not yet in the fight - during the
+   *                intro sweep, and before they have taken their first action.
+   *                Hostiles hold their fire and stay idle. Being shot at
+   *                before you can move is not difficulty, it is a loading
+   *                screen that damages you.
+   */
+  update(
+    dt: number,
+    elapsed: number,
+    playerEye: THREE.Vector3,
+    playerAlive: boolean,
+    engage: boolean,
+  ): void {
     if (!this.enabled) return;
 
     if (this.poseTest) {
@@ -352,7 +365,7 @@ export class EnemyManager {
           this.updateDying(enemy, dt);
           continue;
         default:
-          this.updateAlive(enemy, dt, elapsed, playerEye, playerAlive);
+          this.updateAlive(enemy, dt, elapsed, playerEye, playerAlive, engage);
       }
     }
   }
@@ -443,6 +456,7 @@ export class EnemyManager {
     elapsed: number,
     playerEye: THREE.Vector3,
     playerAlive: boolean,
+    engage: boolean,
   ): void {
     // --- activation ---
     //
@@ -451,7 +465,7 @@ export class EnemyManager {
     // stand inert until an invisible line is crossed, which is the single most
     // obvious tell that this is a scripted encounter rather than a garrison.
     // The line-of-sight test runs below; this is the cheap half.
-    if (enemy.state === 'idle' && playerEye.x >= enemy.activationX) {
+    if (engage && enemy.state === 'idle' && playerEye.x >= enemy.activationX) {
       enemy.state = 'alert';
       enemy.reactionTimer = ENEMY_CONFIG.reactionTime;
     }
@@ -489,7 +503,7 @@ export class EnemyManager {
     const hasLos = inRange && this.collision.hasLineOfSight(eye, playerEye);
 
     // Seeing the player wakes an idle hostile, wherever the player is.
-    if (enemy.state === 'idle' && hasLos && playerAlive) {
+    if (engage && enemy.state === 'idle' && hasLos && playerAlive) {
       enemy.state = 'alert';
       enemy.reactionTimer = ENEMY_CONFIG.reactionTime;
     }
@@ -505,7 +519,7 @@ export class EnemyManager {
       }
     } else if (enemy.state === 'alert' || enemy.state === 'firing') {
       enemy.reactionTimer -= dt;
-      if (hasLos && playerAlive && enemy.reactionTimer <= 0) {
+      if (engage && hasLos && playerAlive && enemy.reactionTimer <= 0) {
         enemy.state = 'firing';
         this.updateFiring(enemy, dt, playerEye, distance);
       } else {

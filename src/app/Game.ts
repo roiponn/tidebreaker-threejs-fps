@@ -90,6 +90,19 @@ export class Game {
   private rafHandle = 0;
   private started = false;
   private particleScale = 1;
+  /**
+   * Latches true the moment the player is actually in the fight.
+   *
+   * Hostiles used to open fire during the intro sweep, while the player is
+   * frozen and the camera is still flying - so the condition bar was already
+   * dropping before the first frame the player could act on. The garrison now
+   * waits for the mission to be active AND for the player to do something:
+   * move, aim or shoot. A short fallback covers a player who deliberately
+   * stands still, so the encounter cannot be stalled indefinitely.
+   */
+  private engagementOpen = false;
+  private engagementGrace = 0;
+
   /** ?enemytrace=1 - mirrors every hostile's state and magazine onto <body>. */
   private enemyTrace = false;
   /** Non-null while ?chaintest= is running. */
@@ -468,6 +481,8 @@ export class Game {
     this.weapon.resupply();
     this.ballistics.reset();
     this.director.reset();
+    this.engagementOpen = false;
+    this.engagementGrace = 0;
     this.beginMission();
   }
 
@@ -588,7 +603,13 @@ export class Game {
     );
 
     // --- 5. enemies ---
-    this.enemies.update(dt, elapsed, this.player.eye, this.player.alive);
+    if (!this.engagementOpen && this.director.phase === 'active') {
+      this.engagementGrace += dt;
+      const acting =
+        this.player.speed > 0.4 || this.input.firing || this.input.aiming || !this.player.grounded;
+      if (acting || this.engagementGrace > 4) this.engagementOpen = true;
+    }
+    this.enemies.update(dt, elapsed, this.player.eye, this.player.alive, this.engagementOpen);
 
     // --- 6. world ---
     this.explosives.update(dt, elapsed);
