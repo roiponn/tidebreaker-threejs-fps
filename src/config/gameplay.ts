@@ -52,8 +52,27 @@ export const WEAPON_CONFIG = {
   reserveAmmo: 180,
   /** Rounds per minute. 720 gives a punchy but controllable cadence. */
   rpm: 720,
+  /**
+   * Damage per round.
+   *
+   * Set against ENEMY_CONFIG.health (100) so a hostile falls to exactly FOUR
+   * body hits with margin to spare - 4 x 26 = 104. Changing either number
+   * without the other silently changes the shots-to-kill, which is the single
+   * most load-bearing feel value in the game, so they are cross-referenced in
+   * both directions.
+   */
   damage: 26,
   headshotMultiplier: 2.4,
+  /**
+   * Limb damage, as a fraction. Deliberately 1 - a hit is a hit.
+   *
+   * Real shooters discount limbs, but this slice's enemies are small, fast and
+   * often half-occluded by cover, and discounting limbs while the legs were
+   * ALSO unhittable was why a target seemed to take an unpredictable number of
+   * rounds. Four hits anywhere on the silhouette is a promise the player can
+   * actually feel.
+   */
+  limbMultiplier: 1,
   range: 220,
   /** Hitscan with a short travel delay for tracer readability. */
   tracerSpeed: 340,
@@ -127,6 +146,7 @@ export const WEAPON_CONFIG = {
 } as const;
 
 export const ENEMY_CONFIG = {
+  /** Four body hits from WEAPON_CONFIG.damage (26). Keep the two in step. */
   health: 100,
   /** Simple state machine only - no navmesh, no squad logic. */
   sightRange: 62,

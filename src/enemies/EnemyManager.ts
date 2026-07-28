@@ -88,6 +88,8 @@ export interface EnemyHit {
   normal: THREE.Vector3;
   distance: number;
   headshot: boolean;
+  /** Which volume was struck. Drives damage scaling and hit feedback. */
+  zone: 'head' | 'torso' | 'legs';
 }
 
 export class EnemyManager {
@@ -114,6 +116,8 @@ export class EnemyManager {
   private readonly tmpVec = new THREE.Vector3();
   private readonly tmpVec2 = new THREE.Vector3();
   private readonly sphereCenter = new THREE.Vector3();
+  private readonly capsuleA = new THREE.Vector3();
+  private readonly capsuleB = new THREE.Vector3();
 
   killCount = 0;
 
@@ -254,9 +258,13 @@ export class EnemyManager {
   // ------------------------------------------------------------------
 
   /**
-   * Ray vs. enemy capsules. Two spheres per soldier (head + torso) is enough
-   * fidelity for this slice and is far cheaper than mesh raycasting a rig that
-   * changes pose every frame.
+   * Ray vs. enemy hit volumes: head sphere, torso sphere, legs capsule.
+   *
+   * Far cheaper than mesh raycasting a rig that changes pose every frame, and
+   * with the legs capsule it now covers the whole silhouette. It used to be
+   * head + torso only, so every round that struck below hip height passed
+   * straight through - the player saw an obvious hit and got no reaction,
+   * which reads as the gun not working rather than as a miss.
    */
   raycast(origin: THREE.Vector3, direction: THREE.Vector3, maxDistance: number): EnemyHit | null {
     let best: EnemyHit | null = null;
@@ -279,17 +287,47 @@ export class EnemyManager {
         0.34,
         maxDistance,
       );
-      const headshot = headHit >= 0 && (torsoHit < 0 || headHit <= torsoHit + 0.05);
-      const distance = headshot ? headHit : torsoHit;
-      if (distance < 0) continue;
+      const legsHit = rayCapsule(
+        origin,
+        direction,
+        this.capsuleA.copy(enemy.position).add(enemy.rig.legsTop),
+        this.capsuleB.copy(enemy.position).add(enemy.rig.legsBottom),
+        enemy.rig.legsRadius,
+        maxDistance,
+      );
+
+      // Nearest wins, with the head breaking ties in its own favour so a shot
+      // that grazes both the head and the shoulder still counts as a headshot.
+      let zone: 'head' | 'torso' | 'legs' | null = null;
+      let distance = Infinity;
+      if (torsoHit >= 0) {
+        zone = 'torso';
+        distance = torsoHit;
+      }
+      if (legsHit >= 0 && legsHit < distance) {
+        zone = 'legs';
+        distance = legsHit;
+      }
+      if (headHit >= 0 && headHit <= distance + 0.05) {
+        zone = 'head';
+        distance = headHit;
+      }
+      if (!zone) continue;
       if (best && distance >= best.distance) continue;
 
+      const headshot = zone === 'head';
       const point = new THREE.Vector3().copy(origin).addScaledVector(direction, distance);
       const center = this.tmpVec
         .copy(enemy.position)
-        .add(headshot ? enemy.rig.headOffset : enemy.rig.torsoOffset);
+        .add(
+          zone === 'head'
+            ? enemy.rig.headOffset
+            : zone === 'legs'
+              ? enemy.rig.legsTop
+              : enemy.rig.torsoOffset,
+        );
       const normal = new THREE.Vector3().subVectors(point, center).normalize();
-      best = { enemy: i, point, normal, distance, headshot };
+      best = { enemy: i, point, normal, distance, headshot, zone };
     }
     return best;
   }
@@ -830,6 +868,58 @@ export class EnemyManager {
     this.enemies.length = 0;
     this.group.removeFromParent();
   }
+}
+
+/**
+ * Ray vs. capsule (a segment with a radius). Returns the near hit distance
+ * or -1.
+ *
+ * Solved as ray-vs-infinite-cylinder, then clamped to the segment, with the
+ * two end spheres tested separately so the caps are not missed. A capsule is
+ * used for the legs rather than a stack of spheres because it is one test and
+ * it matches the shape of a leg column exactly.
+ */
+function rayCapsule(
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  radius: number,
+  maxDistance: number,
+): number {
+  const ax = b.x - a.x;
+  const ay = b.y - a.y;
+  const az = b.z - a.z;
+  const ox = origin.x - a.x;
+  const oy = origin.y - a.y;
+  const oz = origin.z - a.z;
+  const aa = ax * ax + ay * ay + az * az;
+  if (aa < 1e-8) return raySphere(origin, direction, a, radius, maxDistance);
+
+  const ad = ax * direction.x + ay * direction.y + az * direction.z;
+  const ao = ax * ox + ay * oy + az * oz;
+  const A = aa - ad * ad;
+  const B = aa * (ox * direction.x + oy * direction.y + oz * direction.z) - ao * ad;
+  const C = aa * (ox * ox + oy * oy + oz * oz - radius * radius) - ao * ao;
+
+  let best = -1;
+  if (Math.abs(A) > 1e-8) {
+    const disc = B * B - A * C;
+    if (disc >= 0) {
+      const t = (-B - Math.sqrt(disc)) / A;
+      if (t >= 0 && t <= maxDistance) {
+        // Inside the segment's span, not past an end cap.
+        const h = ao + t * ad;
+        if (h >= 0 && h <= aa) best = t;
+      }
+    }
+  }
+  // End caps. Either can be nearer than the barrel hit at a shallow angle.
+  for (const cap of [a, b]) {
+    const t = raySphere(origin, direction, cap, radius, maxDistance);
+    if (t >= 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
 }
 
 /** Ray/sphere intersection. Returns the near hit distance or -1. */

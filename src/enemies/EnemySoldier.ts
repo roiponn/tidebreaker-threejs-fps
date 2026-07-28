@@ -28,9 +28,20 @@ export interface SoldierRig {
   rightLeg: THREE.Group;
   weaponMuzzle: THREE.Object3D;
   strobe: THREE.Mesh;
-  /** Head and torso hit volumes in local space, used by the hitscan test. */
+  /**
+   * Hit volumes in local space, used by the hitscan test.
+   *
+   * Head and torso are spheres; the legs are a CAPSULE, because a leg column
+   * is tall and thin and a sphere that covers it either misses the shins or
+   * balloons out past the silhouette. Everything from the boots up is now
+   * hittable - previously the torso sphere bottomed out at hip height and the
+   * lower half of the body was a dead zone that swallowed rounds.
+   */
   headOffset: THREE.Vector3;
   torsoOffset: THREE.Vector3;
+  legsTop: THREE.Vector3;
+  legsBottom: THREE.Vector3;
+  legsRadius: number;
   dispose(): void;
 }
 
@@ -371,6 +382,12 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
     strobe,
     headOffset: new THREE.Vector3(0, 1.63, 0),
     torsoOffset: new THREE.Vector3(0, 1.18, 0),
+    // Hips down to the boots. Slightly wider than one leg so a shot between
+    // the legs at range still counts - the alternative is a player who is
+    // visibly on target and getting nothing.
+    legsTop: new THREE.Vector3(0, 0.92, 0),
+    legsBottom: new THREE.Vector3(0, 0.12, 0),
+    legsRadius: 0.26,
     dispose(): void {
       for (const g of owned) g.dispose();
       owned.length = 0;

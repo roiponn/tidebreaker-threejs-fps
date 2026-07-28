@@ -47,7 +47,14 @@ export class Ballistics {
     // cannot shoot through a container and still hit a soldier behind it.
     if (enemyHit && (!worldHit || enemyHit.distance < worldHit.distance)) {
       this.shotsHit++;
-      const damage = WEAPON_CONFIG.damage * (enemyHit.headshot ? WEAPON_CONFIG.headshotMultiplier : 1);
+      // Head 2.4x, everything else full. See WEAPON_CONFIG.limbMultiplier for
+      // why limbs are not discounted.
+      const zoneScale = enemyHit.headshot
+        ? WEAPON_CONFIG.headshotMultiplier
+        : enemyHit.zone === 'legs'
+          ? WEAPON_CONFIG.limbMultiplier
+          : 1;
+      const damage = WEAPON_CONFIG.damage * zoneScale;
       this.incident.copy(direction);
       const killed = this.enemies.damage(enemyHit.enemy, damage, this.incident, enemyHit.headshot);
       this.bus.emit('impact:enemy', {
