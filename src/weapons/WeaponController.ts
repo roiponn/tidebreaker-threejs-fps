@@ -443,7 +443,12 @@ export class WeaponController {
    * and it settles back - the primary source of "weight" in the hands.
    */
   private updateSway(dt: number, lookDeltaX: number, lookDeltaY: number): void {
-    const scale = lerp(1, 0.32, this.adsBlend);
+    // Sway is GENERATED at a reduced amplitude while aiming, and then damped
+    // again on the way into the pose (see composePose). Two stages rather than
+    // one because sway must not vanish entirely - a weapon that is welded to
+    // the screen centre feels weightless - but the residual has to be small
+    // enough that the sight stays ON the centre.
+    const scale = lerp(1, 0.20, this.adsBlend);
     const targetX = clamp(-lookDeltaX * 0.0016, -1, 1) * WEAPON_CONFIG.swayPosition * scale * 12;
     const targetY = clamp(lookDeltaY * 0.0016, -1, 1) * WEAPON_CONFIG.swayPosition * scale * 12;
     const rate = WEAPON_CONFIG.swaySmoothing;
@@ -591,7 +596,21 @@ export class WeaponController {
     // That is what reads as the weapon "rotating". Clamping the SUM makes the
     // deviation a guarantee rather than something that depends on the tuning
     // of four independent systems never peaking together.
-    const additiveScale = lerp(1, 0.35, ads);
+    // ADS SUPPRESSION.
+    //
+    // This was 0.35, which let a third of the hip-fire sway and bob survive
+    // into the aimed pose. On an iron sight that is aligned with the screen
+    // centre, positional sway of the weapon IS movement of the sight across
+    // the target - so the scope visibly wandered whenever the player moved the
+    // mouse or walked. Forced ADS made it far worse by keeping the sight up
+    // continuously instead of for the occasional aimed shot.
+    //
+    // Combined with the reduced generation in updateSway, the residual at full
+    // ADS is about 2% of the hip-fire amplitude: enough that the weapon is not
+    // rigidly nailed to the crosshair, small enough that the sight holds.
+    // Recoil and the reload are deliberately NOT scaled here - those are meant
+    // to move the sight, and removing them would make firing feel inert.
+    const additiveScale = lerp(1, 0.10, ads);
     const clampPos = (v: number): number => clamp(v, -VIEWMODEL_POS_LIMIT, VIEWMODEL_POS_LIMIT);
     const clampRot = (v: number): number => clamp(v, -VIEWMODEL_ROT_LIMIT, VIEWMODEL_ROT_LIMIT);
 

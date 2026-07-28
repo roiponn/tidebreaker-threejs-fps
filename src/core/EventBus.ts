@@ -42,6 +42,38 @@ export interface GameEvents {
   'enemy:killed': { position: THREE.Vector3; remaining: number };
   'enemy:fired': { origin: THREE.Vector3; direction: THREE.Vector3 };
 
+  // --- GATEKEEPER (exterior mid-boss) -------------------------------
+  //
+  // These are the fight's AUDIO HOOK POINTS as much as anything else. The
+  // shield/vent cycle is the only thing that differentiates this unit from an
+  // ordinary hostile, so every beat of that cycle has to be announceable
+  // without the audio engine knowing what a Gatekeeper is.
+  /** It has seen the player and locked its shield forward. Klaxon / stinger. */
+  'gatekeeper:engaged': { position: THREE.Vector3 };
+  /** Shield leaves started moving. `open` false = re-sealing. Servo motor. */
+  'gatekeeper:shield': { position: THREE.Vector3; open: boolean };
+  /**
+   * The vent window - the only time the coil can be hurt. `open` true on
+   * entry, false on exit. Pressure release on entry, clamp-shut on exit.
+   */
+  'gatekeeper:vent': { position: THREE.Vector3; open: boolean };
+  /**
+   * One resolved hit. `zone` says WHERE it landed and `blocked` is true when
+   * the armour ate it, so the HUD can show a "no effect" marker instead of a
+   * normal hitmarker - which is how the player learns the shield is real.
+   */
+  'gatekeeper:damaged': {
+    point: THREE.Vector3;
+    zone: 'shield' | 'hull' | 'coil';
+    applied: number;
+    blocked: boolean;
+    healthFraction: number;
+  };
+  /** Down. Emitted once, at the start of the death slump. */
+  'gatekeeper:defeated': { position: THREE.Vector3 };
+  /** The access module has come off its back and is now a world pickup. */
+  'gatekeeper:moduleDropped': { position: THREE.Vector3; object: THREE.Object3D };
+
   'player:damaged': { amount: number; fromDirection: THREE.Vector3; health: number };
   'player:died': void;
   'player:landed': { impact: number };

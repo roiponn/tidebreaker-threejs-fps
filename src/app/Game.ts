@@ -595,7 +595,10 @@ export class Game {
       eye,
       this.player.speed,
       this.player.grounded,
-      this.weapon.adsBlend > 0.35,
+      // Camera bob is suppressed from the moment the sight starts to rise, not
+      // a third of the way up: with forced ADS the rise happens on every shot,
+      // and bob that persists into it reads as the scope shaking.
+      this.weapon.adsBlend > 0.12,
       this.player.sprinting,
     );
 

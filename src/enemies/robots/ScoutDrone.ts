@@ -221,18 +221,22 @@ export function buildScout(mats: MaterialLibrary): ScoutRig {
     sensorMesh,
     alarmBeacon,
     muzzle,
-    // HIT VOLUMES. A drone has no neck, so "head" and "torso" almost coincide -
-    // they are kept as two spheres purely so the same hitscan code path works
-    // for robots and soldiers. The head sphere sits on the sensor pod and is
-    // the crit: destroying the eye of a recon unit is the fantasy, and it is
-    // also the small hard-to-hit volume that makes a fast drone worth aiming at
-    // rather than spraying.
-    headOffset: new THREE.Vector3(0, SCOUT_HOVER_HEIGHT + 0.01, 0),
+    // HIT VOLUMES. A drone has no neck, so "head" and "torso" nearly coincide;
+    // they are kept as two spheres purely so the same hitscan code path serves
+    // robots and soldiers. Both are ON THE YAW AXIS on purpose - the drone
+    // spins to face the player constantly, and an off-axis offset would have to
+    // be re-transformed every frame to stay meaningful.
+    headOffset: new THREE.Vector3(0, SCOUT_HOVER_HEIGHT + 0.02, 0),
     torsoOffset: new THREE.Vector3(0, SCOUT_HOVER_HEIGHT - 0.02, 0),
     // The scout's weak point IS its eye. It is too small to carry a second
     // exposed subsystem, and a unit this simple should teach one lesson only:
     // shoot the glowing bit. Sentinel is where that lesson gets complicated.
-    weakPointOffset: new THREE.Vector3(0, SCOUT_HOVER_HEIGHT + 0.01, 0),
+    //
+    // THE TRAP, same as SENTINEL's: this one is NOT on the yaw axis - the eye
+    // is 0.40m out on the nose, which is nearly half the airframe. The value
+    // below is only correct at zero yaw. Anything that needs the real position
+    // has to use `sensorMesh.getWorldPosition()`.
+    weakPointOffset: new THREE.Vector3(0, SCOUT_HOVER_HEIGHT - 0.01, 0.40),
     weakPoint: sensorMesh,
     dispose(): void {
       parts.dispose();
