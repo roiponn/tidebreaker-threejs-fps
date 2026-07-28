@@ -611,7 +611,7 @@ export class WeaponController {
     // Bright enough to read as an illuminated dot rather than a red smudge.
     // The tiny pulse is there because a holographic sight is not a perfectly
     // steady light source.
-    this.parts.reticleMaterial.emissiveIntensity = 6.4 + Math.sin(elapsed * 9) * 0.3;
+    this.parts.reticleMaterial.emissiveIntensity = 3.6 + Math.sin(elapsed * 9) * 0.2;
     // The optic glass is only worth drawing when the player is behind it.
     // Visible from the hip too - it is a projected dot on glass, not something
     // that switches on when shouldered - but strongest when actually aiming.

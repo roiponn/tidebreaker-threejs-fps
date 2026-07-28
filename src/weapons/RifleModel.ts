@@ -438,19 +438,23 @@ function buildReticleTexture(): THREE.CanvasTexture {
   // Drawn white here: the material's emissive colour tints it, so the dot's
   // hue lives in one place (RETICLE_COLOR below) instead of being split
   // between a texture and a material.
-  const glow = ctx.createRadialGradient(c, c, 0, c, c, 18);
+  // Radii are small because the dot's apparent size is dominated by the GLOW
+  // and then by bloom, not by the core. A 128px texture on a 30mm plane viewed
+  // from ~190mm means 1px of texture is roughly 0.07 degrees, so a glow radius
+  // of 18 was painting a 2.5 degree blob before bloom even touched it.
+  const glow = ctx.createRadialGradient(c, c, 0, c, c, 7);
   glow.addColorStop(0, 'rgba(255,255,255,1)');
   glow.addColorStop(0.34, 'rgba(255,255,255,0.85)');
   glow.addColorStop(0.62, 'rgba(255,255,255,0.22)');
   glow.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(c, c, 18, 0, Math.PI * 2);
+  ctx.arc(c, c, 7, 0, Math.PI * 2);
   ctx.fill();
   // Hard core on top, so the centre stays a crisp point rather than a smudge.
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(c, c, 6, 0, Math.PI * 2);
+  ctx.arc(c, c, 2.4, 0, Math.PI * 2);
   ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
