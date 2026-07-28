@@ -204,17 +204,34 @@ export function buildRifle(mats: MaterialLibrary): RifleParts {
   glass.renderOrder = 2;
 
   const reticleGeo = keep(new THREE.PlaneGeometry(0.030, 0.030));
-  const reticleMaterial = mats.emissive('reticle', 0xff3a2a, 6, { toneMapped: true }).clone();
+  /** The dot's colour, in one place. */
+  const RETICLE_COLOR = 0xff2418;
+  const reticleMaterial = mats.emissive('reticle', RETICLE_COLOR, 6, { toneMapped: true }).clone();
   reticleMaterial.name = 'rifleReticle';
   reticleMaterial.transparent = true;
-  reticleMaterial.opacity = 0.95;
+  reticleMaterial.opacity = 1;
+  // Additive: an illuminated reticle adds light to the sight picture, it does
+  // not paint over it. This is also what stops the dot going muddy against a
+  // bright background.
+  reticleMaterial.blending = THREE.AdditiveBlending;
   reticleMaterial.depthWrite = false;
   reticleMaterial.map = buildReticleTexture();
   reticleMaterial.alphaMap = reticleMaterial.map;
   reticleMaterial.emissiveMap = reticleMaterial.map;
   const reticle = new THREE.Mesh(reticleGeo, reticleMaterial);
-  reticle.position.set(0, 0.100, -0.034);
-  reticle.renderOrder = 3;
+  // IN FRONT OF THE GLASS, AND UNCONDITIONALLY DRAWN.
+  //
+  // It sat at -0.034, behind the glass at -0.030. The glass is transparent but
+  // still writes depth, and it renders first, so the dot failed the depth test
+  // and was never drawn at all - which is why the sight picture had no reticle
+  // in it despite the material being lit and mapped correctly.
+  //
+  // A red dot is a collimated image projected for the eye, not an object
+  // sitting inside the tube, so drawing it over the sight picture regardless
+  // of depth is also the physically honest thing to do.
+  reticle.position.set(0, 0.100, -0.026);
+  reticle.renderOrder = 5;
+  reticleMaterial.depthTest = false;
 
   // ==================================================================
   // Small controls - selector, mag release, bolt catch, sling loop
@@ -384,12 +401,14 @@ function buildReticleTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d');
   if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.clearRect(0, 0, size, size);
-  ctx.strokeStyle = '#ffffff';
-  ctx.fillStyle = '#ffffff';
+  // Ring and chevrons are drawn at reduced alpha: they frame the dot, they are
+  // not the aiming mark. At full strength they pulled the eye off centre.
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
   const c = size / 2;
 
   // Segmented ring - four arcs with gaps at the cardinals.
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 3;
   for (let i = 0; i < 4; i++) {
     const start = (i * Math.PI) / 2 + 0.22;
     ctx.beginPath();
@@ -408,9 +427,30 @@ function buildReticleTexture(): THREE.CanvasTexture {
     ctx.lineTo(c + dx * size * 0.38, c + dy * size * 0.38);
     ctx.stroke();
   }
-  // Centre dot.
+  // CENTRE DOT.
+  //
+  // This was a 4.2px dot on a 128px texture mapped to a 30mm plane - about
+  // 0.6 degrees on screen, which is below what reads as an aiming mark. A red
+  // dot sight IS the dot; the ring around it is decoration. So the dot is now
+  // large enough to see and carries a soft bloom halo, which is what makes a
+  // real illuminated reticle look like light rather than like a painted spot.
+  //
+  // Drawn white here: the material's emissive colour tints it, so the dot's
+  // hue lives in one place (RETICLE_COLOR below) instead of being split
+  // between a texture and a material.
+  const glow = ctx.createRadialGradient(c, c, 0, c, c, 18);
+  glow.addColorStop(0, 'rgba(255,255,255,1)');
+  glow.addColorStop(0.34, 'rgba(255,255,255,0.85)');
+  glow.addColorStop(0.62, 'rgba(255,255,255,0.22)');
+  glow.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(c, c, 4.2, 0, Math.PI * 2);
+  ctx.arc(c, c, 18, 0, Math.PI * 2);
+  ctx.fill();
+  // Hard core on top, so the centre stays a crisp point rather than a smudge.
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(c, c, 6, 0, Math.PI * 2);
   ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);

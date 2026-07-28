@@ -238,8 +238,9 @@ export class WeaponController {
     // the reticle brightness and the sway suppression all key off adsBlend, so
     // pinning only the pose would show a pose nobody ever sees.
     // The sight comes up for the trigger as well as for the aim button, and
-    // lingers briefly after the trigger is released so a burst-tap-burst does
-    // not pump the weapon up and down. Sprinting and reloading lower it - but
+    // drops as soon as the trigger is released - the hold is only long enough
+    // to cover an armed shot still waiting for the sight. Sprinting and
+    // reloading lower it too - but
     // they also block firing entirely (see updateFiring), so there is no path
     // by which a round leaves the barrel from the hip.
     if (this.triggerHeld || this.shotArmed) {
@@ -607,9 +608,14 @@ export class WeaponController {
     this.parts.barrelMaterial.emissiveIntensity = glow * 2.4;
     // Reticle brightness pulses very slightly - a holographic sight is not a
     // perfectly steady light source.
-    this.parts.reticleMaterial.emissiveIntensity = 5.2 + Math.sin(elapsed * 9) * 0.25;
+    // Bright enough to read as an illuminated dot rather than a red smudge.
+    // The tiny pulse is there because a holographic sight is not a perfectly
+    // steady light source.
+    this.parts.reticleMaterial.emissiveIntensity = 6.4 + Math.sin(elapsed * 9) * 0.3;
     // The optic glass is only worth drawing when the player is behind it.
-    this.parts.reticleMaterial.opacity = lerp(0.55, 1, this.adsBlend);
+    // Visible from the hip too - it is a projected dot on glass, not something
+    // that switches on when shouldered - but strongest when actually aiming.
+    this.parts.reticleMaterial.opacity = lerp(0.7, 1, this.adsBlend);
   }
 
   /**
@@ -699,7 +705,7 @@ export class WeaponController {
     //
     // A small residual is kept so the weapon is not a rigid decal; the visible
     // kick at the muzzle end and the shell ejection carry the impact instead.
-    const recoilScaleAds = lerp(1, 0.08, ads);
+    const recoilScaleAds = lerp(1, 0.30, ads);
     const clampPos = (v: number): number => clamp(v, -VIEWMODEL_POS_LIMIT, VIEWMODEL_POS_LIMIT);
     const clampRot = (v: number): number => clamp(v, -VIEWMODEL_ROT_LIMIT, VIEWMODEL_ROT_LIMIT);
 

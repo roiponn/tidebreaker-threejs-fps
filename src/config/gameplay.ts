@@ -83,21 +83,22 @@ export const WEAPON_CONFIG = {
   /**
    * How long the sight stays up after the trigger is released.
    *
-   * Long enough that tapping does not pump the weapon, short enough that the
-   * player returns to a wide view when they stop shooting. This exists because
-   * hip fire is disabled - see WeaponController.setTrigger().
+   * Effectively zero: releasing the trigger lowers the sight straight away.
+   * The small residual only exists to cover an armed shot that is still
+   * waiting for the sight to finish rising, so a tap never loses its round.
+   * This used to be over a second to mask an oscillation in the ADS blend;
+   * that bug is fixed, so the sight no longer needs to be pinned up to hide
+   * it. See WeaponController.setTrigger().
    */
-  adsHoldAfterFire: 1.15,
+  adsHoldAfterFire: 0.05,
   /**
    * How long the sight takes to come back DOWN, versus `adsTime` to go up.
    *
-   * Deliberately more than twice the rise. A sight that falls as fast as it
-   * rises turns every trigger tap into a full-amplitude pump, and a player who
-   * taps at a steady rate gets a metronome - which is exactly what "the scope
-   * shakes when firing" was. Rising fast is responsive; falling fast is just
-   * noise, because nothing the player is doing depends on it.
+   * Slightly slower than the rise so the drop is not a snap, but short enough
+   * to read as immediate. The pumping this used to guard against came from the
+   * blend never settling on its target, not from the fall rate.
    */
-  adsLowerTime: 0.42,
+  adsLowerTime: 0.13,
   reloadTime: 1.18,
   reloadEmptyTime: 2.95,
   /** When in the reload the magazine actually swaps (drives ammo counter). */

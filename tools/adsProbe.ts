@@ -20,12 +20,10 @@ import { cloneVisualConfig } from '@/config/visual';
   createElement: () => ({
     width: 0,
     height: 0,
-    getContext: () => ({
-      clearRect() {}, fillRect() {}, beginPath() {}, arc() {}, moveTo() {},
-      lineTo() {}, stroke() {}, fill() {}, closePath() {},
-      set fillStyle(_v: string) {}, set strokeStyle(_v: string) {},
-      set lineWidth(_v: number) {}, set globalAlpha(_v: number) {},
-    }),
+    getContext: () => new Proxy(
+        { createRadialGradient: () => ({ addColorStop() {} }) },
+        { get: (t, k) => (k in t ? (t as Record<string, unknown>)[k as string] : () => {}), set: () => true },
+      )
   }),
 };
 
@@ -48,7 +46,8 @@ let t = 0;
 console.log(`fps=${fps}  dt=${dt.toFixed(4)}`);
 console.log('frame   ads   root.x   root.y   root.z   rotX     camPitch  ammo');
 for (let i = 0; i < Math.round(fps * 1.6); i++) {
-  weapon.setTrigger(true, i === 0);
+  const held = i < Math.round(fps * 0.6);
+  weapon.setTrigger(held, i === 0);
   view.update(dt, t, eye, 0, true, weapon.adsBlend, false);
   weapon.update(dt, t, false, false, 0, true, false, 0, 0);
   t += dt;
