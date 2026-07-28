@@ -846,6 +846,11 @@ export class HarborLevel {
    * walk was quiet. The yard cluster is down to 3 and the canyon to 2, and the
    * pair the reduction paid for now sits at the bay mouth so the slice opens
    * with contact instead of building to it.
+   *
+   * `patrolTo` is the far end of a hostile's firing lane, and it is kept about
+   * a metre from `home` for everyone except the catwalk. These are holding
+   * positions, not patrols: a soldier that walks several metres back and forth
+   * under fire looks like it is pacing a corridor.
    */
   private placeEnemies(): void {
     const spawn = (
@@ -865,26 +870,34 @@ export class HarborLevel {
       });
     };
 
-    // Bay mouth: first contact, close enough to be met before the player has
-    // finished crossing the opening shot. The lane here is clear between the
-    // two container stacks (z -3.6 .. +3.4), and both fall back toward the
-    // player rather than holding, so the fight comes to the bay.
-    spawn(11.8, -2.2, 9.4, -1.2, 0);
-    spawn(13.2, 2.6, 10.8, 1.5, 2);
+    // Opening: one hostile per route east, not a group.
+    //
+    // Three of these standing together at the bay mouth read as a firing squad
+    // waiting to be mown down, and left the north and south sides of the lane
+    // completely unwatched. One holds each way through, spread in depth so the
+    // player meets them one at a time rather than all at once:
+    //
+    //   north  - the gap between the inland stack and the lane
+    //   south  - behind the jersey barriers, covering the seaward side
+    //   centre - deeper, holding the jog where the lane narrows
+    spawn(12.4, 3.1, 11.2, 2.2, 0);
+    spawn(15.9, -2.9, 14.8, -2.1, 1);
+    spawn(21.6, 0.4, 20.6, 1.2, 6);
 
-    // Canyon: contact at medium range, using container cover.
-    spawn(17.5, -2.4, 15.0, -3.6, 3);
-    spawn(27.0, -3.0, 25.0, -1.0, 11);
+    // Canyon: the last hostile before the yard opens up.
+    spawn(27.0, -3.0, 26.0, -2.0, 11);
 
     // Yard: the main firefight, layered near/far and high/low.
-    spawn(34.5, 4.8, 32.0, 2.0, 22);
-    spawn(37.5, -6.2, 40.0, -4.4, 24);
-    // Catwalk: forces the player to look up mid-fight.
-    spawn(36.2, 6.0, 36.2, -4.0, 24, 5.24, true);
+    spawn(34.5, 4.8, 33.4, 3.6, 22);
+    spawn(37.5, -6.2, 38.6, -5.2, 24);
+    // Catwalk: forces the player to look up mid-fight. The catwalk is a long
+    // run, so this one keeps a longer lane - it is the only hostile whose
+    // movement the player is meant to track.
+    spawn(36.2, 6.0, 36.2, 0.5, 24, 5.24, true);
 
     // Pier head: the last stand at the objective.
-    spawn(50.5, -5.4, 52.0, -3.0, 42);
-    spawn(54.5, 2.6, 51.5, 1.4, 44);
+    spawn(50.5, -5.4, 51.3, -4.4, 42);
+    spawn(54.5, 2.6, 53.6, 1.9, 44);
   }
 
   // ------------------------------------------------------------------

@@ -21,7 +21,7 @@ import { buildSoldier, type SoldierRig } from './EnemySoldier';
  * They activate by the player's progress along +X so the fight paces itself
  * across the 60-90 second route instead of everything waking at once.
  */
-type EnemyState = 'idle' | 'alert' | 'firing' | 'dying' | 'dead';
+type EnemyState = 'idle' | 'alert' | 'firing' | 'reloading' | 'dying' | 'dead';
 
 interface Enemy {
   rig: SoldierRig;
@@ -40,6 +40,10 @@ interface Enemy {
   reactionTimer: number;
   fireTimer: number;
   burstRemaining: number;
+  /** Rounds left before this hostile has to reload. */
+  magRounds: number;
+  /** Counts down through the reload; drives the reload pose in animate(). */
+  reloadTimer: number;
   flinch: number;
   flinchDirection: THREE.Vector3;
   deathTimer: number;
@@ -103,6 +107,7 @@ export class EnemyManager {
    * level is not repeatable; this is.
    */
   private poseTest = false;
+  private poseTestReload = false;
   private poseTestOrigin = new THREE.Vector3();
   private poseTestForward = new THREE.Vector3(1, 0, 0);
 
@@ -142,6 +147,8 @@ export class EnemyManager {
         reactionTimer: 0,
         fireTimer: this.rng.range(0, ENEMY_CONFIG.burstPause),
         burstRemaining: 0,
+        magRounds: ENEMY_CONFIG.magazineRounds,
+        reloadTimer: 0,
         flinch: 0,
         flinchDirection: new THREE.Vector3(),
         deathTimer: 0,
@@ -180,6 +187,18 @@ export class EnemyManager {
    * number the level already owns, and it silently went stale the moment the
    * encounter layout changed.
    */
+  /**
+   * Per-hostile state readout for `?enemytrace=1`. Reload is a 2 second event
+   * that only fires after twelve rounds, so confirming it enters at all - and
+   * that the pose follows - is not something to do by staring at the screen.
+   */
+  get stateTrace(): string {
+    return this.enemies
+      .filter((e) => e.state !== 'dead')
+      .map((e) => `${e.state[0]}${e.magRounds}`)
+      .join(' ');
+  }
+
   get totalCount(): number {
     return this.enemies.length;
   }
@@ -195,8 +214,9 @@ export class EnemyManager {
   }
 
   /** Freezes the AI and lines hostiles up at fixed inspection distances. */
-  setPoseTest(enabled: boolean, origin: THREE.Vector3, yaw: number): void {
+  setPoseTest(enabled: boolean, origin: THREE.Vector3, yaw: number, mode = ''): void {
     this.poseTest = enabled;
+    this.poseTestReload = mode === 'reload';
     this.poseTestOrigin.copy(origin);
     this.poseTestForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     if (!enabled) return;
@@ -353,6 +373,16 @@ export class EnemyManager {
       enemy.rig.root.rotation.y = enemy.facing;
       enemy.rig.root.position.copy(enemy.position);
 
+      // ?posetest=reload holds every subject in a looping reload so the pose
+      // can be inspected at 2m. The reload only fires after twelve rounds in
+      // play, and by then the hostile is usually too far away to read.
+      if (this.poseTestReload) {
+        enemy.state = 'reloading';
+        enemy.reloadTimer = ENEMY_CONFIG.reloadTime * (1 - ((elapsed * 0.4) % 1));
+        this.animate(enemy, dt, elapsed);
+        continue;
+      }
+
       if (phase < 8) {
         // 0-2 idle, 2-4 walking, 4-6 running, 6-8 aiming/firing.
         enemy.state = phase < 2 ? 'idle' : 'alert';
@@ -414,14 +444,22 @@ export class EnemyManager {
     playerEye: THREE.Vector3,
     playerAlive: boolean,
   ): void {
-    // --- activation by player progress ---
+    // --- activation ---
+    //
+    // Progress past `activationX` wakes a hostile, but SEEING the player wakes
+    // one too. Without that a soldier the player has walked into view of will
+    // stand inert until an invisible line is crossed, which is the single most
+    // obvious tell that this is a scripted encounter rather than a garrison.
+    // The line-of-sight test runs below; this is the cheap half.
     if (enemy.state === 'idle' && playerEye.x >= enemy.activationX) {
       enemy.state = 'alert';
       enemy.reactionTimer = ENEMY_CONFIG.reactionTime;
     }
 
     // --- strafe along the authored lane ---
-    if (enemy.state !== 'idle') {
+    // A reloading soldier holds position: moving and reloading at once is what
+    // makes the pose unreadable.
+    if (enemy.state !== 'idle' && enemy.state !== 'reloading') {
       enemy.laneTimer -= dt;
       if (enemy.laneTimer <= 0) {
         enemy.laneTimer = ENEMY_CONFIG.strafeInterval * this.rng.range(0.7, 1.4);
@@ -450,7 +488,22 @@ export class EnemyManager {
     const inRange = distance < ENEMY_CONFIG.sightRange;
     const hasLos = inRange && this.collision.hasLineOfSight(eye, playerEye);
 
-    if (enemy.state === 'alert' || enemy.state === 'firing') {
+    // Seeing the player wakes an idle hostile, wherever the player is.
+    if (enemy.state === 'idle' && hasLos && playerAlive) {
+      enemy.state = 'alert';
+      enemy.reactionTimer = ENEMY_CONFIG.reactionTime;
+    }
+
+    if (enemy.state === 'reloading') {
+      enemy.reloadTimer -= dt;
+      if (enemy.reloadTimer <= 0) {
+        enemy.magRounds = ENEMY_CONFIG.magazineRounds;
+        enemy.state = 'alert';
+        // A short beat after seating the magazine before firing resumes.
+        enemy.fireTimer = 0.18;
+        enemy.burstRemaining = 0;
+      }
+    } else if (enemy.state === 'alert' || enemy.state === 'firing') {
       enemy.reactionTimer -= dt;
       if (hasLos && playerAlive && enemy.reactionTimer <= 0) {
         enemy.state = 'firing';
@@ -489,7 +542,14 @@ export class EnemyManager {
     }
 
     enemy.burstRemaining--;
+    enemy.magRounds--;
     enemy.fireTimer = ENEMY_CONFIG.fireInterval;
+
+    if (enemy.magRounds <= 0) {
+      enemy.state = 'reloading';
+      enemy.reloadTimer = ENEMY_CONFIG.reloadTime;
+      enemy.burstRemaining = 0;
+    }
 
     const muzzle = new THREE.Vector3();
     enemy.rig.weaponMuzzle.getWorldPosition(muzzle);
@@ -684,18 +744,51 @@ export class EnemyManager {
     rig.head.rotation.z = damp(rig.head.rotation.z, -enemy.leanRoll * 0.6 - enemy.hitRoll * 0.3, 9, dt);
 
     // ---------------------------------------------------------------
-    // 8. Arms - swing when walking, up on the weapon when aiming
+    // 8. Arms - swing when walking, up on the weapon when aiming,
+    //           and the reload
     // ---------------------------------------------------------------
     const aim = aiming ? 1 : 0;
     // Arms swing opposite to the legs, but only while the weapon is down.
     const armSwing = -swing * 0.42 * gait * (1 - aim);
-    const rightBase = lerp(-0.80, -1.32, aim) - enemy.recoil * 0.16;
-    const leftBase = lerp(-0.74, -1.24, aim) - enemy.recoil * 0.10;
+    let rightBase = lerp(-0.80, -1.32, aim) - enemy.recoil * 0.16;
+    let leftBase = lerp(-0.74, -1.24, aim) - enemy.recoil * 0.10;
+    let rightRoll = -0.22 - aim * 0.06;
+    let leftRoll = 0.30 + aim * 0.08;
+
+    // RELOAD.
+    //
+    // Previously a reloading hostile simply stopped shooting, which from the
+    // player's side is indistinguishable from one that has lost interest. The
+    // pose has to say what is happening: the weapon comes down off the
+    // shoulder, the support hand leaves it and drops to the magazine well,
+    // comes back up, and the weapon returns.
+    //
+    // Three beats over the reload's life, shaped so the hand is at the well
+    // for the middle third rather than passing through it.
+    if (enemy.state === 'reloading' && ENEMY_CONFIG.reloadTime > 0) {
+      const t = clamp01(1 - enemy.reloadTimer / ENEMY_CONFIG.reloadTime);
+      // Ease in and out of the whole action so it does not start with a snap.
+      const engage = Math.sin(clamp01(t / 0.22) * Math.PI * 0.5);
+      const release = Math.sin(clamp01((1 - t) / 0.22) * Math.PI * 0.5);
+      const hold = Math.min(engage, release);
+      // The support hand's trip down to the well and back.
+      const reach = Math.sin(clamp01((t - 0.15) / 0.55) * Math.PI);
+
+      rightBase = lerp(rightBase, -0.46, hold);          // weapon lowered
+      leftBase = lerp(leftBase, -0.30 + reach * 0.55, hold); // hand to the well
+      rightRoll = lerp(rightRoll, -0.10, hold);
+      leftRoll = lerp(leftRoll, 0.62 - reach * 0.30, hold);
+      // The whole upper body turns slightly into the work and dips.
+      rig.torso.rotation.x += hold * 0.10;
+      rig.torso.rotation.y += hold * 0.16;
+      rig.head.rotation.x += hold * 0.16 * reach; // glances down at the well
+    }
+
     rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, rightBase + armSwing, 9, dt);
     rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, leftBase - armSwing, 9, dt);
     // Shoulders follow the weapon rather than staying square to the chest.
-    rig.rightArm.rotation.z = damp(rig.rightArm.rotation.z, -0.22 - aim * 0.06, 8, dt);
-    rig.leftArm.rotation.z = damp(rig.leftArm.rotation.z, 0.30 + aim * 0.08, 8, dt);
+    rig.rightArm.rotation.z = damp(rig.rightArm.rotation.z, rightRoll, 8, dt);
+    rig.leftArm.rotation.z = damp(rig.leftArm.rotation.z, leftRoll, 8, dt);
 
     // IR strobe blink - the readability aid, not a decoration.
     const blink = Math.sin(elapsed * 4.2 + enemy.strobePhase);

@@ -47,6 +47,8 @@ instead of a blank page.
 | `?quality=high` | Force the Cinematic preset |
 | `?exposure=N` | Override the authored exposure (inspect assets lit rather than as silhouettes) |
 | `?posetest=1` | Freeze the AI and line five hostiles up at 2 / 4 / 8 / 15 / 30 m, cycling idle → walk → run → aim/fire → hit reactions → death |
+| `?posetest=reload` | Same line-up, held in a looping reload so that pose can be inspected close up |
+| `?enemytrace=1` | Mirror every hostile's state and magazine onto `document.body.dataset.enemies` (`i`dle / `a`lert / `f`iring / `r`eloading) |
 | `?boom=N` | Detonate a charge N seconds in, 7 m ahead of the player, repeating. Phase-independent, so it works on the briefing view too |
 | `?boomhold=L` | Pin the blast light at life fraction `L` (0 ignition, 0.08 peak, 1 out) so a specific moment can be captured. Implies a single detonation |
 | `?boomslow=N` | Stretch the blast light's lifetime by N. The decay curve is normalised, so every life fraction looks as it does at speed |

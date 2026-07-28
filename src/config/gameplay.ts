@@ -80,7 +80,7 @@ export const WEAPON_CONFIG = {
   spreadRecovery: 0.055,
 
   adsTime: 0.19,
-  reloadTime: 2.35,
+  reloadTime: 1.18,
   reloadEmptyTime: 2.95,
   /** When in the reload the magazine actually swaps (drives ammo counter). */
   reloadAmmoSwapAt: 0.62,
@@ -119,8 +119,16 @@ export const ENEMY_CONFIG = {
   accuracy: 0.32,
   damage: 8,
   reactionTime: 0.42,
-  strafeSpeed: 2.4,
-  strafeInterval: 2.1,
+  /**
+   * Repositioning is deliberately slight. A soldier that slides back and forth
+   * along its lane at walking pace reads as fidgeting rather than as holding a
+   * firing position, and it makes the whole encounter feel busy.
+   */
+  strafeSpeed: 1.15,
+  strafeInterval: 3.2,
+  /** Rounds before the hostile has to reload, and how long that takes. */
+  magazineRounds: 12,
+  reloadTime: 2.1,
   /** Hit reaction: flinch magnitude and duration. */
   flinchAmount: 0.16,
   flinchTime: 0.22,

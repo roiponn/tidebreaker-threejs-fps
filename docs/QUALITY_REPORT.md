@@ -451,6 +451,53 @@ the **first genuine confirmation of player death and the mission-failed flow** -
 appeared with TIME 0:33 and HOSTILES DOWN 0 / 9, correctly derived. Mission *completion* is still
 unverified.
 
+### Combat feel pass (player request)
+
+Five changes, all requested after playing:
+
+1. **The opening three no longer stand together.** They held one spot at the bay mouth, which read
+   as a firing squad and left both sides of the lane unwatched. Now one holds each way east - north
+   side, south side behind the jersey barriers, and one deeper at the jog where the lane narrows -
+   spread in depth so they are met one at a time.
+
+2. **Hostiles engage on sight.** Activation was purely `playerEye.x >= activationX`, so a soldier
+   the player had walked into full view of would stand inert until an invisible line was crossed.
+   Line of sight now wakes one as well, wherever the player is.
+
+3. **Repositioning is much smaller.** `strafeSpeed` 2.4 → 1.15 m/s, `strafeInterval` 2.1 → 3.2 s,
+   and every `patrolTo` pulled to about a metre from `home` (the catwalk hostile keeps its long lane
+   - it is the only one whose movement the player is meant to track). These are holding positions,
+   not patrols.
+
+4. **Hostiles reload, visibly.** They had no magazine at all: a 4-round burst then a 1.25 s pause
+   that from the player's side is indistinguishable from losing interest. Now 12 rounds, then a
+   2.1 s reload during which the soldier holds position, the weapon comes off the shoulder, the
+   support hand drops to the magazine well and returns, and the head glances down at the work.
+   Player reload time halved, 2.35 s → 1.18 s.
+
+5. **The metallic tick after every shot is gone.** `playWeaponFire` had a fourth layer - a 3.4 kHz
+   bandpassed noise burst 12 ms behind the shot, meant to read as the action cycling. At 720 rpm it
+   was a continuous rattle rather than a mechanism. The impact ring on metal was also part of it:
+   every container in the level is `thinMetal` and the ring ran 2.2x the impact duration at near
+   full level, so consecutive hits stacked into a drone. Kept but cut to a tick (0.7x duration,
+   ~third of the level) so the player can still hear what they hit.
+
+**Verified in play** with `?enemytrace=1`, which mirrors each hostile's state and magazine. The full
+cycle was observed twice on both opening hostiles:
+
+```
+f1 → r0 → r0 → a12 → f12 → f11 … f1 → r0 → r0 → f12
+```
+
+- reload enters at zero rounds, holds, refills to 12, and firing resumes — it does not soft-lock;
+- both hostiles cycle independently rather than in lockstep;
+- all four states are reached, including engagement from the attract view before any activation line
+  is crossed, which is change 2 working.
+
+The reload *pose* was inspected at 2 m with `?posetest=reload`. It reads as intended for a rigid rig;
+it is not a hand-animated magazine change and there is no magazine prop that actually leaves the
+weapon.
+
 ### P16 — The view-model responded to window resizes differently from the world (FIXED)
 
 Third report of the weapon rotating in play. This time it was instrumented rather than guessed at:

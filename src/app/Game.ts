@@ -90,6 +90,8 @@ export class Game {
   private rafHandle = 0;
   private started = false;
   private particleScale = 1;
+  /** ?enemytrace=1 - mirrors every hostile's state and magazine onto <body>. */
+  private enemyTrace = false;
   /** Non-null while ?chaintest= is running. */
   private chainTest: ChainTest | null = null;
   /** >0 while a ?boom= test detonation is pending; repeats on an interval. */
@@ -212,7 +214,12 @@ export class Game {
       // ?posetest=1 lines hostiles up at fixed distances with the AI frozen,
       // so joint quality can be inspected repeatably.
       if (params.has('posetest')) {
-        this.enemies.setPoseTest(true, this.level.playerSpawn, this.level.playerSpawnYaw);
+        this.enemies.setPoseTest(
+          true,
+          this.level.playerSpawn,
+          this.level.playerSpawnYaw,
+          params.get('posetest') ?? '',
+        );
       }
       // ?exposure=N overrides the authored exposure. The debug panel has the
       // same control, but a URL form is scriptable, which is what makes
@@ -246,6 +253,7 @@ export class Game {
       // extreme can be inspected. Sprint and wall-retract only occur
       // transiently in play, which is how their rotations went unchecked.
       if (params.has('weapontrace')) this.weapon.debugTrace = true;
+      if (params.has('enemytrace')) this.enemyTrace = true;
       const pose = params.get('weaponpose');
       if (pose === 'hip' || pose === 'ads' || pose === 'sprint' || pose === 'retract') {
         this.weapon.debugPose = pose;
@@ -648,6 +656,7 @@ export class Game {
     const tick = Math.floor(this.clock.elapsed).toString();
     if (document.body.dataset.tick !== tick) document.body.dataset.tick = tick;
     document.body.dataset.blast = this.vfx.blastState;
+    if (this.enemyTrace) document.body.dataset.enemies = this.enemies.stateTrace;
     // Render statistics, mirrored for the same reason as everything else here:
     // the debug panel needs a keypress and a focused canvas, neither of which
     // a scripted capture session reliably has.

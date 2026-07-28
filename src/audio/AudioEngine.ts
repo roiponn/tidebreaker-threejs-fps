@@ -280,18 +280,10 @@ export class AudioEngine {
     thump.start(now);
     thump.stop(now + 0.2);
 
-    // 4. MECH - the action, slightly late and much quieter.
-    const mech = this.noiseSource(0.05, 2.4);
-    const mechFilter = ctx.createBiquadFilter();
-    mechFilter.type = 'bandpass';
-    mechFilter.frequency.value = 3400;
-    mechFilter.Q.value = 2.2;
-    const mechGain = ctx.createGain();
-    mechGain.gain.setValueAtTime(0, now);
-    mechGain.gain.linearRampToValueAtTime(0.22, now + 0.012);
-    mechGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-    mech.connect(mechFilter).connect(mechGain).connect(input);
-    mech.stop(now + 0.09);
+    // There was a fourth layer here: a 3.4kHz bandpassed noise burst 12ms
+    // behind the shot, meant to read as the action cycling. It arrived just
+    // late enough to be heard as a separate metallic tick after every round,
+    // which at 720rpm is a continuous rattle rather than a mechanism.
   }
 
   /** Enemy weapon: same structure, thinner, distance-filtered and delayed. */
@@ -344,12 +336,20 @@ export class AudioEngine {
     let duration = 0.09;
     let level = 0.6;
     let ring = 0;
+    /** Ring loudness relative to the impact. 0 disables the tail entirely. */
+    let ringLevel = 0.32;
 
     switch (surface) {
+      // The ring on the two metal cases used to run 2.2x the impact duration
+      // at near-full level. Every container in the level is thinMetal, so in
+      // practice almost every round the player fired left a 750ms tone hanging
+      // behind it and consecutive shots stacked into a drone. Kept, because it
+      // is how the player hears what they hit, but as a tick rather than a
+      // bell - see `ringDecay` below.
       case 'metal':
-        frequency = 2600; q = 3.2; duration = 0.14; ring = 1750; break;
+        frequency = 2600; q = 3.2; duration = 0.14; ring = 1750; ringLevel = 0.1; break;
       case 'thinMetal':
-        frequency = 1800; q = 5.5; duration = 0.34; level = 0.75; ring = 620; break;
+        frequency = 1800; q = 5.5; duration = 0.34; level = 0.75; ring = 620; ringLevel = 0.12; break;
       case 'fence':
         frequency = 3200; q = 6; duration = 0.28; level = 0.45; ring = 980; break;
       case 'water':
@@ -377,13 +377,13 @@ export class AudioEngine {
 
     // A struck metal panel keeps ringing after the strike - the detail that
     // makes shooting a container obviously different from shooting concrete.
-    if (ring > 0) {
+    if (ring > 0 && ringLevel > 0) {
       const osc = ctx.createOscillator();
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(ring * (0.92 + Math.random() * 0.16), now);
       const ringGain = ctx.createGain();
-      ringGain.gain.setValueAtTime(level * 0.32, now);
-      ringGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 2.2);
+      ringGain.gain.setValueAtTime(level * ringLevel, now);
+      ringGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.7);
       osc.connect(ringGain).connect(input);
       osc.start(now);
       osc.stop(now + duration * 2.3);
