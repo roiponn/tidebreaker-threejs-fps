@@ -168,6 +168,12 @@ export class MissionDirector {
     }
   }
 
+  /** Debug: end the intro immediately, running its normal completion path. */
+  finishIntro(): void {
+    if (this.phase !== 'intro') return;
+    this.timer = MISSION_CONFIG.introDurationSec;
+  }
+
   get isPlayable(): boolean {
     return this.phase === 'active';
   }

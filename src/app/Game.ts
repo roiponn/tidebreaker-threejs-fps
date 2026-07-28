@@ -105,6 +105,7 @@ export class Game {
 
   /** ?enemytrace=1 - mirrors every hostile's state and magazine onto <body>. */
   private enemyTrace = false;
+  private skipIntro = false;
   /** Non-null while ?chaintest= is running. */
   private chainTest: ChainTest | null = null;
   /** >0 while a ?boom= test detonation is pending; repeats on an interval. */
@@ -266,6 +267,10 @@ export class Game {
       // extreme can be inspected. Sprint and wall-retract only occur
       // transiently in play, which is how their rotations went unchecked.
       if (params.has('weapontrace')) this.weapon.debugTrace = true;
+      // ?skipintro=1 hands control over immediately. The intro is 6.5s of
+      // simulated time and this browser throttles a scripted page hard enough
+      // that it can take minutes of wall clock to elapse.
+      if (params.has('skipintro')) this.skipIntro = true;
       if (params.has('enemytrace')) this.enemyTrace = true;
       const pose = params.get('weaponpose');
       if (pose === 'hip' || pose === 'ads' || pose === 'sprint' || pose === 'retract') {
@@ -619,6 +624,10 @@ export class Game {
       lookX,
       lookY,
     );
+
+    if (this.skipIntro && this.director.phase === 'intro') {
+      this.director.finishIntro();
+    }
 
     // --- 5. enemies ---
     if (!this.engagementOpen && this.director.phase === 'active') {

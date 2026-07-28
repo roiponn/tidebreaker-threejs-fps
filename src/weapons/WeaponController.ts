@@ -267,7 +267,7 @@ export class WeaponController {
     this.updateWallProbe(dt);
     this.updateMovingParts(dt);
     this.updateHeat(dt, elapsed);
-    this.composePose();
+    this.composePose(dt);
   }
 
   private updateFiring(dt: number, sprinting: boolean, moveSpeed: number, crouched: boolean): void {
@@ -503,7 +503,31 @@ export class WeaponController {
   }
 
   /** Spring-damped return so recoil overshoots slightly and settles. */
+  /**
+   * Recoil springs, SUB-STEPPED at a fixed rate.
+   *
+   * These are integrated with explicit Euler, and the frame dt is clamped at
+   * 0.05 - so on a machine running at 20fps a single shot moved the weapon far
+   * enough in one step to hit the additive clamp, and the spring rang instead
+   * of settling. The same shot on a 120fps machine produced a smooth push.
+   * That frame-rate dependence is the reason tuning the amplitudes never
+   * helped: the amplitudes were never the problem, the step size was.
+   *
+   * Fixed 1/120s sub-steps make the result identical at any frame rate, and
+   * make the spring stable at the largest dt the clock will ever hand us.
+   */
   private updateRecoilSpring(dt: number): void {
+    const STEP = 1 / 120;
+    let remaining = dt;
+    // Bounded so a long stall cannot turn into an unbounded loop.
+    for (let i = 0; i < 12 && remaining > 1e-5; i++) {
+      const h = Math.min(STEP, remaining);
+      remaining -= h;
+      this.stepRecoilSpring(h);
+    }
+  }
+
+  private stepRecoilSpring(dt: number): void {
     const stiffness = 210;
     const damping = WEAPON_CONFIG.weaponKickRecovery * 1.55;
     for (const axis of ['x', 'y', 'z'] as const) {
@@ -573,9 +597,10 @@ export class WeaponController {
 
   /** ?weapontrace=1 - mirrors every rotation layer onto document.body. */
   debugTrace = false;
+  private readonly traceRing: string[] = [];
 
   /** Sums every animation layer into the final transform. */
-  private composePose(): void {
+  private composePose(dtSeconds = 0): void {
     let ads = this.adsBlend;
     let sprint = this.sprintBlend;
     let retract = this.retractBlend;
@@ -653,6 +678,20 @@ export class WeaponController {
 
     // Diagnostic: which layer is moving the weapon, in degrees. Written only
     // when explicitly asked for, so it costs nothing in a normal session.
+    // Per-frame ring buffer. The scope-shake investigation needs to know what
+    // the numbers ACTUALLY do frame to frame, and a single-value data attribute
+    // only ever shows the last frame - which is how three wrong diagnoses got
+    // made from still images instead of from the signal.
+    if (this.debugTrace) {
+      const v = this.view;
+      this.traceRing.push(
+        `${this.adsBlend.toFixed(3)},${v.adsAmount.toFixed(3)},` +
+          `${v.debugPitch.toFixed(4)},${v.debugRecoilPitch.toFixed(4)},` +
+          `${v.debugShake.toFixed(3)},${this.tmpPos.x.toFixed(3)},${dtSeconds.toFixed(4)}`,
+      );
+      if (this.traceRing.length > 240) this.traceRing.shift();
+      document.body.dataset.adsring = this.traceRing.join(' ');
+    }
     if (this.debugTrace) {
       const d = (r: number): string => (r * 57.2958).toFixed(1);
       const wc = this.view.weaponCamera;

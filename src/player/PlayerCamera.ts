@@ -183,12 +183,27 @@ export class PlayerCamera {
     // climb the player compensates for into a bounce they cannot. Chasing at a
     // rate closer to the decay makes the same total displacement arrive as a
     // push rather than a flick.
-    const recovery = 1 - Math.exp(-13 * dt);
-    this.recoilPitch += (this.recoilTargetPitch - this.recoilPitch) * recovery;
-    this.recoilYaw += (this.recoilTargetYaw - this.recoilYaw) * recovery;
-    const decay = Math.exp(-8.6 * dt);
-    this.recoilTargetPitch *= decay;
-    this.recoilTargetYaw *= decay;
+    // Sub-stepped for the same reason as the weapon spring: at a clamped 0.05
+    // dt these exponentials take one enormous bite per frame, so the view
+    // arrived at its recoil position in a single visible jump instead of over
+    // several frames. Exponentials are analytically frame-rate independent in
+    // isolation, but the PERCEIVED motion is not - what the player sees is the
+    // sequence of positions actually presented, and at 20fps that sequence was
+    // two samples of a curve that should have had a dozen.
+    {
+      const STEP = 1 / 120;
+      let remaining = dt;
+      for (let i = 0; i < 12 && remaining > 1e-5; i++) {
+        const h = Math.min(STEP, remaining);
+        remaining -= h;
+        const recovery = 1 - Math.exp(-13 * h);
+        this.recoilPitch += (this.recoilTargetPitch - this.recoilPitch) * recovery;
+        this.recoilYaw += (this.recoilTargetYaw - this.recoilYaw) * recovery;
+        const decay = Math.exp(-8.6 * h);
+        this.recoilTargetPitch *= decay;
+        this.recoilTargetYaw *= decay;
+      }
+    }
 
     // --- shake: quadratic decay, position + roll only ---
     this.shakeTrauma = Math.max(0, this.shakeTrauma - dt * 1.55);
@@ -272,6 +287,17 @@ export class PlayerCamera {
   /** Forward direction of the aim, used for hitscan and interaction probes. */
   getAimDirection(target: THREE.Vector3): THREE.Vector3 {
     return target.set(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+  }
+
+  /** Debug readouts for the scope-shake trace. */
+  get debugPitch(): number {
+    return this.pitch;
+  }
+  get debugRecoilPitch(): number {
+    return this.recoilPitch;
+  }
+  get debugShake(): number {
+    return this.shakeTrauma;
   }
 
   get adsAmount(): number {
