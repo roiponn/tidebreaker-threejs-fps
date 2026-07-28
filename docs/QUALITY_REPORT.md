@@ -423,6 +423,56 @@ Cost: +8 boxes, merged into the existing view-model batches. Draw calls unchange
 The sight picture is usable — a hostile at 15 m is plainly visible through it — but the red dot does
 not read. Not chased further; it is a small, self-contained follow-up.
 
+### P16 — The view-model responded to window resizes differently from the world (FIXED)
+
+Third report of the weapon rotating in play. This time it was instrumented rather than guessed at:
+`?weapontrace=1` mirrors the composed view-model transform, the camera FOV and aspect, and every
+contributing layer onto `document.body.dataset.weapon` each frame.
+
+**What the measurements ruled out.** Playing the mission with the trace running:
+
+| Layer | Measured peak |
+| --- | --- |
+| Look sway | 0.0° — a single 337 px mouse flick moves it ~0.2°, because the target only holds for one frame |
+| Wall retract | 1.6° |
+| Sprint | 0° (never engaged in the runs) |
+| Recoil | 8.8° |
+| Reload swing | 9.7° |
+| **Composed total** | **17.2° peak, base 8.6°** |
+
+And critically: the composed transform in the briefing view and in active play is **bit-identical** —
+`pos 0.196,-0.178,-0.500 | rot 3.0,8.6,1.5`. The weapon was not moving.
+
+**What was actually different was the projection.** The same trace showed `cam fov 65.2 asp 1.565`
+in one capture and `cam fov 76.0 asp 0.827` in another. P13 had locked the view-model camera to a
+*horizontal* FOV while the world camera uses a *vertical* one — so the two respond to a change in
+window shape differently. Any mid-session resize (a window drag, entering or leaving fullscreen, a
+browser chrome bar appearing when pointer lock engages) changes the view-model's FOV but not the
+world's, and the weapon swings relative to the scene. That is the "starts rotating" symptom, and it
+starts at exactly the moment the window changes — which for a browser game is usually the moment
+play begins.
+
+The horizontal lock was my own fix for P13 and it was the wrong shape of solution: it solved the
+static framing and introduced a dynamic failure. The view-model camera now uses a fixed vertical FOV
+exactly like the world camera (58° hip / 40° ADS), so a wider window shows more world *and* more
+weapon and their relationship never changes. Verified: `fov 58.0` at aspect 1.565 and at 2.243, with
+the world and weapon scaling together. Under the previous build the same change would have moved it
+65.2° → 51.2°.
+
+Two further hardenings, since the request was that the weapon stay put:
+
+- **Every additive layer is now clamped** to ±3.4° and ±2.2 cm per axis *in sum*. Individually each
+  layer was modest, but four independent systems peaking together is not something tuning can
+  guarantee. On an object 50 cm from the eye a couple of centimetres of translation changes the
+  projected angle of the barrel more than the same number of degrees of rotation does, so the
+  position is bounded as well as the rotation.
+- The reload body swing dropped again (9.7° → ~5°).
+
+**Honest limitation:** I could not open either of the last two recordings — macOS blocks the
+screen-capture temp directory (`Operation not permitted`), so this was diagnosed from
+instrumentation of my own session, not from watching the reported failure. The mechanism found does
+produce the reported symptom, but I have not confirmed it is the one the player saw.
+
 ### P12 — Enemy rigid-part appearance (IMPROVED, not eliminated)
 
 See §5.

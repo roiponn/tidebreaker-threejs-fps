@@ -64,7 +64,6 @@ export class PlayerCamera {
    */
   introYawOffset = 0;
   introPitchOffset = 0;
-  private aspect = 1;
 
   constructor(private readonly visual: MutableVisual) {
     const c = visual.camera;
@@ -79,31 +78,30 @@ export class PlayerCamera {
     this.camera.aspect = aspect;
     this.weaponCamera.aspect = aspect;
     this.camera.updateProjectionMatrix();
-    this.aspect = aspect;
     this.applyWeaponFov();
   }
 
   /**
-   * The view-model camera is locked to a HORIZONTAL field of view.
+   * The view-model camera uses a fixed VERTICAL field of view, exactly like
+   * the world camera.
    *
-   * three's `fov` is vertical, so a vertical-locked view-model camera changes
-   * its horizontal coverage with the window shape - and the view-model is
-   * placed off to one side, close to the eye, which is exactly where that
-   * matters most. At a tall window the rifle falls outside the frustum and
-   * only a sliver shows; at a wide one the same rifle fans right across the
-   * frame. Locking the horizontal angle makes the weapon occupy the same
-   * fraction of the screen width at every aspect, which is the only way the
-   * placement constants below can mean anything.
+   * An earlier version locked it to a horizontal FOV instead, reasoning that
+   * the view-model sits off to one side and so should be framed by the
+   * screen's width. That is true in isolation and false in practice: it makes
+   * the weapon respond to a change in window shape DIFFERENTLY from the world
+   * behind it. Any mid-session resize - a window drag, entering or leaving
+   * fullscreen, a browser chrome bar appearing when pointer lock engages -
+   * then swings the weapon relative to the scene, which is precisely the
+   * "the gun starts rotating" failure it was meant to prevent.
    *
-   * `weaponFov` / `weaponFovAds` are therefore HORIZONTAL degrees.
+   * Matching the world camera means the two always agree. A wider window shows
+   * more world and more weapon (Hor+), a narrower one shows less of both, and
+   * their relationship never changes. The placement constants in
+   * WeaponController are authored for a normal landscape window on that basis.
    */
   private applyWeaponFov(): void {
     const c = this.visual.camera;
-    const horizontal = lerp(c.weaponFov, c.weaponFovAds, this.adsBlend);
-    const halfH = THREE.MathUtils.degToRad(horizontal) * 0.5;
-    const vertical = 2 * Math.atan(Math.tan(halfH) / Math.max(this.aspect, 0.2));
-    // Cap it so a very tall window cannot produce a fisheye view-model.
-    this.weaponCamera.fov = Math.min(THREE.MathUtils.radToDeg(vertical), 76);
+    this.weaponCamera.fov = lerp(c.weaponFov, c.weaponFovAds, this.adsBlend);
     this.weaponCamera.updateProjectionMatrix();
   }
 

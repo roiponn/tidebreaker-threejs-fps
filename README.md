@@ -53,6 +53,7 @@ instead of a blank page.
 | `?chaintest=N` | Run the deterministic drum chain-reaction test N times; results land on `document.body.dataset.chain` |
 | `?chainseed=I` | Which drum the chain test lights (default 2, the fuel dump; 0 is the pair at the bay mouth) |
 | `?weaponpose=hip\|ads\|sprint\|retract` | Pin the view-model pose so each extreme can be inspected. `ads` drives the real ADS blend, so FOV and reticle are faithful |
+| `?weapontrace=1` | Mirror the view-model transform, camera FOV/aspect and every animation layer onto `document.body.dataset.weapon` each frame |
 | `?wetdebug=mask\|rough\|reflect` | Visualise the wet-ground fields |
 
 Without a flag the preset is auto-detected from core count and GPU string.

@@ -22,12 +22,12 @@ export const VISUAL_CONFIG = {
     far: 900,
     /**
      * Weapon is rendered by a second camera so it never clips into geometry.
-     * These are HORIZONTAL degrees - see PlayerCamera.applyWeaponFov(). The
-     * view-model sits close to the eye and off to one side, so its framing has
-     * to be locked to the screen's width, not its height.
+     * VERTICAL degrees, matching `fovBase` - see PlayerCamera.applyWeaponFov()
+     * for why the view-model must not use a different convention from the
+     * world camera.
      */
-    weaponFov: 90,
-    weaponFovAds: 65,
+    weaponFov: 58,
+    weaponFovAds: 40,
     weaponNear: 0.004,
     weaponFar: 8,
   },

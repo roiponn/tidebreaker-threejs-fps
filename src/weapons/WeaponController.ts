@@ -87,6 +87,15 @@ const ADS_ROTATION = new THREE.Euler(0, 0, 0);
  */
 const SPRINT_POSITION = new THREE.Vector3(0.235, -0.250, -0.480);
 const SPRINT_ROTATION = new THREE.Euler(0.135, 0.255, -0.115);
+/**
+ * Hard bounds on how far the additive layers may take the view-model from its
+ * pose: 3.4 degrees and 2.2cm per axis. Deliberately tight. The weapon lives
+ * 50cm from the eye, so this is still clearly visible motion - it just cannot
+ * become a swing.
+ */
+const VIEWMODEL_ROT_LIMIT = 0.060;
+const VIEWMODEL_POS_LIMIT = 0.022;
+
 const RETRACT_POSITION = new THREE.Vector3(0.190, -0.232, -0.430);
 const RETRACT_ROTATION = new THREE.Euler(0.075, 0.235, 0.055);
 
@@ -361,7 +370,7 @@ export class WeaponController {
     // whole screen during a 2.4-second animation the player must fight through.
     const swing = Math.sin(t * Math.PI);
     this.reloadPos.set(-0.015 * swing, -0.035 * swing, -0.02 * swing);
-    this.reloadRot.set(0.10 * swing, 0.15 * swing, -0.17 * swing);
+    this.reloadRot.set(0.06 * swing, 0.08 * swing, -0.09 * swing);
 
     // Empty reload: charging handle is racked at the end.
     if (this.reloadWasEmpty && t > 0.84 && this.boltVelocity === 0 && this.boltOffset < 0.001) {
@@ -485,6 +494,9 @@ export class WeaponController {
    */
   debugPose: 'hip' | 'ads' | 'sprint' | 'retract' | null = null;
 
+  /** ?weapontrace=1 - mirrors every rotation layer onto document.body. */
+  debugTrace = false;
+
   /** Sums every animation layer into the final transform. */
   private composePose(): void {
     let ads = this.adsBlend;
@@ -522,17 +534,47 @@ export class WeaponController {
 
     // Additive layers. Sway and bob are suppressed while aiming so the sight
     // picture stays usable.
+    //
+    // Every additive layer is BOUNDED before it is applied. Individually each
+    // one is modest, but they sum - sway plus recoil plus the reload swing can
+    // put the weapon a long way from its pose, and on an object this close to
+    // the eye a few centimetres of translation changes the projected angle of
+    // the barrel far more than the same number of degrees of rotation does.
+    // That is what reads as the weapon "rotating". Clamping the SUM makes the
+    // deviation a guarantee rather than something that depends on the tuning
+    // of four independent systems never peaking together.
     const additiveScale = lerp(1, 0.35, ads);
-    this.tmpPos.x += (this.swayPos.x + this.bobPos.x) * additiveScale + this.reloadPos.x;
-    this.tmpPos.y += (this.swayPos.y + this.bobPos.y) * additiveScale + this.reloadPos.y + this.recoilPos.y;
-    this.tmpPos.z += this.recoilPos.z + this.reloadPos.z;
+    const clampPos = (v: number): number => clamp(v, -VIEWMODEL_POS_LIMIT, VIEWMODEL_POS_LIMIT);
+    const clampRot = (v: number): number => clamp(v, -VIEWMODEL_ROT_LIMIT, VIEWMODEL_ROT_LIMIT);
+
+    this.tmpPos.x += clampPos((this.swayPos.x + this.bobPos.x) * additiveScale + this.reloadPos.x);
+    this.tmpPos.y += clampPos(
+      (this.swayPos.y + this.bobPos.y) * additiveScale + this.reloadPos.y + this.recoilPos.y,
+    );
+    this.tmpPos.z += clampPos(this.recoilPos.z + this.reloadPos.z);
 
     this.parts.root.position.copy(this.tmpPos);
-    this.tmpRot.x += this.swayRot.x * additiveScale + this.recoilRot.x + this.reloadRot.x;
-    this.tmpRot.y += this.swayRot.y * additiveScale + this.reloadRot.y;
-    this.tmpRot.z += this.swayRot.z * additiveScale + this.recoilRot.z + this.reloadRot.z;
+    this.tmpRot.x += clampRot(this.swayRot.x * additiveScale + this.recoilRot.x + this.reloadRot.x);
+    this.tmpRot.y += clampRot(this.swayRot.y * additiveScale + this.reloadRot.y);
+    this.tmpRot.z += clampRot(this.swayRot.z * additiveScale + this.recoilRot.z + this.reloadRot.z);
     this.tmpQuat.setFromEuler(this.tmpRot);
     this.parts.root.quaternion.copy(this.tmpQuat);
+
+    // Diagnostic: which layer is moving the weapon, in degrees. Written only
+    // when explicitly asked for, so it costs nothing in a normal session.
+    if (this.debugTrace) {
+      const d = (r: number): string => (r * 57.2958).toFixed(1);
+      const wc = this.view.weaponCamera;
+      document.body.dataset.weapon =
+        `cam fov ${wc.fov.toFixed(1)} asp ${wc.aspect.toFixed(3)}` +
+        ` | pos ${this.tmpPos.x.toFixed(3)},${this.tmpPos.y.toFixed(3)},${this.tmpPos.z.toFixed(3)}` +
+        ` | rot ${d(this.tmpRot.x)},${d(this.tmpRot.y)},${d(this.tmpRot.z)}` +
+        ` | ads ${this.adsBlend.toFixed(2)} sprint ${this.sprintBlend.toFixed(2)}` +
+        ` retract ${this.retractBlend.toFixed(2)}` +
+        ` | sway ${d(this.swayRot.x)},${d(this.swayRot.y)},${d(this.swayRot.z)}` +
+        ` | recoil ${d(this.recoilRot.x)},${d(this.recoilRot.y)},${d(this.recoilRot.z)}` +
+        ` | reload ${d(this.reloadRot.x)},${d(this.reloadRot.y)},${d(this.reloadRot.z)}`;
+    }
   }
 
   // ------------------------------------------------------------------

@@ -245,6 +245,7 @@ export class Game {
       // ?weaponpose=hip|ads|sprint|retract pins the view-model pose so each
       // extreme can be inspected. Sprint and wall-retract only occur
       // transiently in play, which is how their rotations went unchecked.
+      if (params.has('weapontrace')) this.weapon.debugTrace = true;
       const pose = params.get('weaponpose');
       if (pose === 'hip' || pose === 'ads' || pose === 'sprint' || pose === 'retract') {
         this.weapon.debugPose = pose;
