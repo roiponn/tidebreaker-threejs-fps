@@ -249,10 +249,28 @@ export class WeaponController {
     const previousAds = this.adsBlend > 0.5;
     // ADS uses a fixed-time approach rather than a damp so the transition
     // duration is exactly WEAPON_CONFIG.adsTime and can be tuned to the audio.
-    // ASYMMETRIC. Up quickly, down slowly - see WEAPON_CONFIG.adsLowerTime.
-    const rising = adsTarget > this.adsBlend;
-    const adsRate = rising ? 1 / WEAPON_CONFIG.adsTime : -1 / WEAPON_CONFIG.adsLowerTime;
-    this.adsBlend = clamp01(this.adsBlend + adsRate * dt);
+    // ASYMMETRIC, AND IT MUST SETTLE EXACTLY ON THE TARGET.
+    //
+    // This line used to step by a signed rate chosen with a strict inequality:
+    //
+    //     rate = (adsTarget > adsBlend) ? +rise : -fall
+    //
+    // At equality - which is where it lands the instant the sight is fully up -
+    // that test is FALSE, so it applied the falling rate and walked back off
+    // the target. Next frame it was below, so it climbed to 1 again, and fell
+    // again. The blend chattered around 1.0 for as long as the trigger was
+    // held, and since the blend interpolates the whole hip-to-ADS pose, a 4%
+    // chatter is over a centimetre of weapon movement at ~10Hz. That is the
+    // scope shake, and it is why every amplitude I tuned made no difference:
+    // the oscillation was in the blend parameter, not in any of the layers
+    // being blended.
+    //
+    // Clamping toward the target instead of stepping past it cannot oscillate.
+    if (adsTarget > this.adsBlend) {
+      this.adsBlend = Math.min(adsTarget, this.adsBlend + dt / WEAPON_CONFIG.adsTime);
+    } else if (adsTarget < this.adsBlend) {
+      this.adsBlend = Math.max(adsTarget, this.adsBlend - dt / WEAPON_CONFIG.adsLowerTime);
+    }
     if (previousAds !== this.adsBlend > 0.5) {
       this.bus.emit('weapon:adsChanged', { ads: this.adsBlend > 0.5 });
     }
