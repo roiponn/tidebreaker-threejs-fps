@@ -568,7 +568,7 @@ export class Game {
     const introBlend = this.director.phase === 'intro' ? this.director.introBlend : 0;
     if (introBlend > 0) this.director.getIntroOffset(this.introOffset);
     if (playable) {
-      this.view.applyLook(lookX, lookY, this.weapon.adsBlend > 0.5);
+      this.view.applyLook(lookX, lookY, this.weapon.adsBlend);
     }
 
     // --- 3. player + camera ---
@@ -595,10 +595,8 @@ export class Game {
       eye,
       this.player.speed,
       this.player.grounded,
-      // Camera bob is suppressed from the moment the sight starts to rise, not
-      // a third of the way up: with forced ADS the rise happens on every shot,
-      // and bob that persists into it reads as the scope shaking.
-      this.weapon.adsBlend > 0.12,
+      // The weapon's blend is the single ADS authority - see PlayerCamera.update.
+      this.weapon.adsBlend,
       this.player.sprinting,
     );
 

@@ -106,9 +106,13 @@ export class PlayerCamera {
   }
 
   /** Mouse look. Deltas are raw pixels; sensitivity is applied here. */
-  applyLook(deltaX: number, deltaY: number, ads: boolean): void {
+  /** `adsBlend` is the weapon's 0..1 blend; sensitivity interpolates with it. */
+  applyLook(deltaX: number, deltaY: number, adsBlend: number): void {
+    // Interpolated, not switched. A sensitivity that snaps part-way through the
+    // ADS rise makes the same mouse movement turn the view by two different
+    // amounts within one continuous gesture, which reads as the aim slipping.
     const sensitivity =
-      PLAYER_CONFIG.mouseSensitivity * (ads ? PLAYER_CONFIG.adsSensitivityScale : 1);
+      PLAYER_CONFIG.mouseSensitivity * lerp(1, PLAYER_CONFIG.adsSensitivityScale, adsBlend);
     this.yaw -= deltaX * sensitivity;
     this.pitch -= deltaY * sensitivity;
     this.pitch = clamp(this.pitch, -PLAYER_CONFIG.pitchLimit, PLAYER_CONFIG.pitchLimit);
@@ -154,7 +158,21 @@ export class PlayerCamera {
     eyePosition: THREE.Vector3,
     speed: number,
     grounded: boolean,
-    ads: boolean,
+    /**
+     * The weapon's ADS blend, 0..1. NOT a boolean and NOT re-derived here.
+     *
+     * There used to be a second blend on this class: a damp() toward a boolean
+     * threshold of this same value. That gave the view-model camera's FOV an
+     * exponential curve while the weapon's POSE moved on a linear one, so
+     * through every transition the sight geometry and the projection it is
+     * being viewed through disagreed - and the sight visibly swam across the
+     * screen instead of rising onto the centre. Forced ADS turned that from an
+     * occasional artefact into something that happened on every shot.
+     *
+     * The weapon owns this number because the weapon is where the transition
+     * duration is authored. One blend, one curve, one place to change it.
+     */
+    adsBlend: number,
     sprinting: boolean,
   ): void {
     // --- recoil: chase the target, then bleed the target back to zero ---
@@ -177,7 +195,10 @@ export class PlayerCamera {
     const shakeRoll = fbm1(t + 55.3, 2) * trauma * 0.045;
 
     // --- walk bob ---
-    const targetBob = grounded && speed > 0.4 && !ads ? clamp(speed / PLAYER_CONFIG.speedSprint, 0, 1) : 0;
+    // Scaled by (1 - adsBlend) rather than gated on a threshold: a hard cut
+    // part-way through the transition is a visible step in the sight picture.
+    const walk = grounded && speed > 0.4 ? clamp(speed / PLAYER_CONFIG.speedSprint, 0, 1) : 0;
+    const targetBob = walk * (1 - adsBlend);
     this.bobAmount = damp(this.bobAmount, targetBob, 8, dt);
     if (grounded) this.bobPhase += dt * (7.4 + speed * 0.55);
     const bobY = Math.sin(this.bobPhase * 2) * 0.021 * this.bobAmount;
@@ -189,8 +210,8 @@ export class PlayerCamera {
     this.landDip += this.landDipVelocity * dt;
 
     // --- FOV ---
-    this.adsBlend = damp(this.adsBlend, ads ? 1 : 0, 14, dt);
-    this.sprintBlend = damp(this.sprintBlend, sprinting && !ads ? 1 : 0, 6, dt);
+    this.adsBlend = adsBlend;
+    this.sprintBlend = damp(this.sprintBlend, sprinting && adsBlend < 0.5 ? 1 : 0, 6, dt);
     const c = this.visual.camera;
     const targetFov =
       lerp(c.fovBase + c.fovSprintAdd * this.sprintBlend, c.fovAds, this.adsBlend);

@@ -290,6 +290,11 @@ export class WeaponController {
         this.shotArmed = false;
         this.fireTimer = 60 / WEAPON_CONFIG.rpm;
       } else {
+        // Spend the armed shot on the dry fire too. Without this an empty
+        // trigger pull with no reserve left `shotArmed` set forever, which
+        // holds forcedAds true and welds the weapon into the aimed pose with
+        // no way out - the sight simply never comes down again.
+        this.shotArmed = false;
         this.bus.emit('weapon:dryFire');
         this.fireTimer = 0.35;
         // Auto-reload on an empty trigger pull: expected behaviour in the genre.
@@ -636,7 +641,7 @@ export class WeaponController {
         `cam fov ${wc.fov.toFixed(1)} asp ${wc.aspect.toFixed(3)}` +
         ` | pos ${this.tmpPos.x.toFixed(3)},${this.tmpPos.y.toFixed(3)},${this.tmpPos.z.toFixed(3)}` +
         ` | rot ${d(this.tmpRot.x)},${d(this.tmpRot.y)},${d(this.tmpRot.z)}` +
-        ` | ads ${this.adsBlend.toFixed(2)} sprint ${this.sprintBlend.toFixed(2)}` +
+        ` | ads ${this.adsBlend.toFixed(3)} camAds ${this.view.adsAmount.toFixed(3)} sprint ${this.sprintBlend.toFixed(2)}` +
         ` retract ${this.retractBlend.toFixed(2)}` +
         ` | sway ${d(this.swayRot.x)},${d(this.swayRot.y)},${d(this.swayRot.z)}` +
         ` | recoil ${d(this.recoilRot.x)},${d(this.recoilRot.y)},${d(this.recoilRot.z)}` +
