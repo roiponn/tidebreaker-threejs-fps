@@ -657,22 +657,44 @@ export class WeaponController {
     // Combined with the reduced generation in updateSway, the residual at full
     // ADS is about 2% of the hip-fire amplitude: enough that the weapon is not
     // rigidly nailed to the crosshair, small enough that the sight holds.
-    // Recoil and the reload are deliberately NOT scaled here - those are meant
-    // to move the sight, and removing them would make firing feel inert.
     const additiveScale = lerp(1, 0.10, ads);
+
+    // WEAPON-MODEL RECOIL IS SUPPRESSED IN ADS.
+    //
+    // I previously excluded recoil from this suppression on the grounds that
+    // it is "meant to move the sight". That was backwards, and it is the whole
+    // reason the scope still shook after three attempts at the surrounding
+    // systems.
+    //
+    // When the sight is aligned with the screen centre, ANY movement of the
+    // weapon model is movement of the sight across the target - which is the
+    // one thing a scoped weapon must not do. Look at how this reads in a
+    // shipped shooter: the sight is welded to the centre of the screen and the
+    // recoil is expressed by the WORLD climbing, not by the reticle wandering.
+    // The camera recoil already does that job here, and it is untouched.
+    //
+    // A small residual is kept so the weapon is not a rigid decal; the visible
+    // kick at the muzzle end and the shell ejection carry the impact instead.
+    const recoilScaleAds = lerp(1, 0.08, ads);
     const clampPos = (v: number): number => clamp(v, -VIEWMODEL_POS_LIMIT, VIEWMODEL_POS_LIMIT);
     const clampRot = (v: number): number => clamp(v, -VIEWMODEL_ROT_LIMIT, VIEWMODEL_ROT_LIMIT);
 
     this.tmpPos.x += clampPos((this.swayPos.x + this.bobPos.x) * additiveScale + this.reloadPos.x);
     this.tmpPos.y += clampPos(
-      (this.swayPos.y + this.bobPos.y) * additiveScale + this.reloadPos.y + this.recoilPos.y,
+      (this.swayPos.y + this.bobPos.y) * additiveScale +
+        this.reloadPos.y +
+        this.recoilPos.y * recoilScaleAds,
     );
-    this.tmpPos.z += clampPos(this.recoilPos.z + this.reloadPos.z);
+    this.tmpPos.z += clampPos(this.recoilPos.z * recoilScaleAds + this.reloadPos.z);
 
     this.parts.root.position.copy(this.tmpPos);
-    this.tmpRot.x += clampRot(this.swayRot.x * additiveScale + this.recoilRot.x + this.reloadRot.x);
+    this.tmpRot.x += clampRot(
+      this.swayRot.x * additiveScale + this.recoilRot.x * recoilScaleAds + this.reloadRot.x,
+    );
     this.tmpRot.y += clampRot(this.swayRot.y * additiveScale + this.reloadRot.y);
-    this.tmpRot.z += clampRot(this.swayRot.z * additiveScale + this.recoilRot.z + this.reloadRot.z);
+    this.tmpRot.z += clampRot(
+      this.swayRot.z * additiveScale + this.recoilRot.z * recoilScaleAds + this.reloadRot.z,
+    );
     this.tmpQuat.setFromEuler(this.tmpRot);
     this.parts.root.quaternion.copy(this.tmpQuat);
 
