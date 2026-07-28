@@ -176,7 +176,14 @@ export class PlayerCamera {
     sprinting: boolean,
   ): void {
     // --- recoil: chase the target, then bleed the target back to zero ---
-    const recovery = 1 - Math.exp(-PLAYER_CONFIG.mouseSensitivity * 0 - 26 * dt);
+    //
+    // The chase rate used to be 26/s against a target that decays at 8.6/s -
+    // three times faster in than out, so every shot SNAPPED the view up and
+    // then eased it back down. That asymmetry is what turns recoil from a
+    // climb the player compensates for into a bounce they cannot. Chasing at a
+    // rate closer to the decay makes the same total displacement arrive as a
+    // push rather than a flick.
+    const recovery = 1 - Math.exp(-13 * dt);
     this.recoilPitch += (this.recoilTargetPitch - this.recoilPitch) * recovery;
     this.recoilYaw += (this.recoilTargetYaw - this.recoilYaw) * recovery;
     const decay = Math.exp(-8.6 * dt);

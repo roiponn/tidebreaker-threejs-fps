@@ -350,7 +350,18 @@ export class WeaponController {
       WEAPON_CONFIG.recoilRampMax,
       smoothstep(clamp01(this.shotsInBurst / WEAPON_CONFIG.recoilRampShots)),
     );
-    const adsDamp = lerp(1, 0.72, this.adsBlend);
+    // Recoil damping while scoped.
+    //
+    // Was 0.72 - a 28% reduction, which is nothing. A scoped shot still threw
+    // the view up by more than half a degree, and with the burst ramp on top
+    // that reaches a degree. The eye reads a sight picture that jumps and
+    // returns, once per trigger pull, as the scope shaking - because from the
+    // player's side that is exactly what it is.
+    //
+    // Recoil is not removed: the weapon still climbs, which is what makes
+    // sustained fire cost something. It is damped hard enough that the sight
+    // stays ON the target between shots instead of bouncing off it.
+    const adsDamp = lerp(1, 0.32, this.adsBlend);
     const kick = ramp * adsDamp * this.recoilScale;
     this.view.addRecoil(
       WEAPON_CONFIG.recoilVertical * kick,
@@ -358,7 +369,12 @@ export class WeaponController {
     );
     // Camera shake on firing is deliberately tiny - the weapon model moving is
     // what sells the shot; shaking the world just hurts the player's aim.
-    this.view.addShake(0.028 * adsDamp, 34);
+    //
+    // And while scoped it is removed entirely. Shake is random noise applied
+    // to the camera; through a sight that is aligned with the screen centre it
+    // has no reading other than "the scope is vibrating". Scaled by
+    // (1 - adsBlend) rather than by adsDamp so it genuinely reaches zero.
+    this.view.addShake(0.028 * (1 - this.adsBlend), 34);
 
     // Weapon model kick, as an impulse into the spring below.
     this.recoilVel.z += WEAPON_CONFIG.weaponKickBack * kick * 62;
