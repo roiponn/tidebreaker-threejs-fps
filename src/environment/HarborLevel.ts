@@ -837,6 +837,16 @@ export class HarborLevel {
   // Encounter placement
   // ------------------------------------------------------------------
 
+  /**
+   * Encounter layout: 9 hostiles.
+   *
+   * The garrison used to be 11 and weighted toward the far end - 6 of them in
+   * the yard alone - so the fight got denser exactly as the player was running
+   * low on the ammunition to deal with it, and the opening two-thirds of the
+   * walk was quiet. The yard cluster is down to 3 and the canyon to 2, and the
+   * pair the reduction paid for now sits at the bay mouth so the slice opens
+   * with contact instead of building to it.
+   */
   private placeEnemies(): void {
     const spawn = (
       x: number,
@@ -855,19 +865,22 @@ export class HarborLevel {
       });
     };
 
+    // Bay mouth: first contact, close enough to be met before the player has
+    // finished crossing the opening shot. The lane here is clear between the
+    // two container stacks (z -3.6 .. +3.4), and both fall back toward the
+    // player rather than holding, so the fight comes to the bay.
+    spawn(11.8, -2.2, 9.4, -1.2, 0);
+    spawn(13.2, 2.6, 10.8, 1.5, 2);
+
     // Canyon: contact at medium range, using container cover.
     spawn(17.5, -2.4, 15.0, -3.6, 3);
-    spawn(22.5, 3.2, 24.5, 1.4, 7);
     spawn(27.0, -3.0, 25.0, -1.0, 11);
 
     // Yard: the main firefight, layered near/far and high/low.
     spawn(34.5, 4.8, 32.0, 2.0, 22);
     spawn(37.5, -6.2, 40.0, -4.4, 24);
-    spawn(42.0, 5.4, 44.0, 2.6, 26);
-    spawn(40.0, -1.0, 37.0, -2.2, 27);
-    // Catwalk pair: forces the player to look up mid-fight.
+    // Catwalk: forces the player to look up mid-fight.
     spawn(36.2, 6.0, 36.2, -4.0, 24, 5.24, true);
-    spawn(36.2, -6.5, 36.2, 2.0, 26, 5.24, true);
 
     // Pier head: the last stand at the objective.
     spawn(50.5, -5.4, 52.0, -3.0, 42);

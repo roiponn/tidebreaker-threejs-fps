@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPON_CONFIG, MISSION_CONFIG } from '@/config/gameplay';
+import { WEAPON_CONFIG } from '@/config/gameplay';
 import type { EventBus } from '@/core/EventBus';
 import { clamp01, damp } from '@/core/MathUtils';
 
@@ -146,6 +146,7 @@ export class Hud {
       crouched: boolean;
       sprinting: boolean;
       enemiesRemaining: number;
+      enemiesTotal: number;
       cameraYaw: number;
     },
   ): void {
@@ -209,7 +210,7 @@ export class Hud {
 
     // --- objective counter ---
     const counter = `HOSTILES ${String(state.enemiesRemaining).padStart(2, '0')} / ${String(
-      MISSION_CONFIG.totalHostiles,
+      state.enemiesTotal,
     ).padStart(2, '0')}`;
     if (counter !== this.lastCounter) {
       this.lastCounter = counter;

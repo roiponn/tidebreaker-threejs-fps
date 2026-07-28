@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cloneVisualConfig, type MutableVisual } from '@/config/visual';
-import { MISSION_CONFIG, WEAPON_CONFIG } from '@/config/gameplay';
+import { WEAPON_CONFIG } from '@/config/gameplay';
 import { DEFAULT_QUALITY, QUALITY_PRESETS, detectQuality, type QualityLevel } from '@/config/quality';
 
 import { GameClock } from '@/core/Clock';
@@ -707,6 +707,7 @@ export class Game {
       crouched: this.player.stance === 'crouch',
       sprinting: this.player.sprinting,
       enemiesRemaining: this.enemies.aliveCount,
+      enemiesTotal: this.enemies.totalCount,
       cameraYaw: this.view.yaw,
     });
 
@@ -751,7 +752,7 @@ export class Game {
     const accuracy = this.ballistics.accuracy * 100;
     this.overlays.showEnd(success, [
       ['TIME', formatTime(this.director.missionTime)],
-      ['HOSTILES DOWN', `${this.enemies.killCount} / ${MISSION_CONFIG.totalHostiles}`],
+      ['HOSTILES DOWN', `${this.enemies.killCount} / ${this.enemies.totalCount}`],
       ['ACCURACY', `${accuracy.toFixed(0)}%`],
       ['ROUNDS FIRED', String(this.ballistics.shotsFired)],
     ]);

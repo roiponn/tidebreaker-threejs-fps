@@ -26,7 +26,8 @@ Being explicit, because the brief forbids claiming unverified work:
 | Clean production build, fresh session, no console errors | **Verified** — `vite build` clean, chain test re-run on the built bundle, console shows only Vite messages |
 | Draw-call / triangle / light cost of the enemy motion work | **Verified** — 638 / 301,643 / 17 identical before and after, same viewpoint |
 | Chain reactions between drums | **Verified** — deterministic harness, 5 runs across two clusters, dev and production builds (see P9) |
-| Player death and mission completion | **NOT verified** — the loop is implemented; a full kill-to-extraction run was not played |
+| Player death and the mission-failed card | **Verified** — died at 0:33 under fire from the new bay-mouth pair; the K.I.A. card showed correct stats |
+| Mission completion (reaching extraction) | **NOT verified** |
 | No console errors or warnings | **Verified** — a fresh tab logs only Vite's connection messages |
 | 60 fps at 1080p on a discrete GPU | **NOT verified** — see §4 |
 | Blind comparison against reference footage | **Not performed.** No reference material was provided |
@@ -164,7 +165,8 @@ together.
 
 **What is still not right.** The figure is still visibly a rigid-part character on close
 inspection: limbs are smooth capsules with no cloth deformation, and there is no skinning. The
-fix cost roughly 100 draw calls and 40k triangles across 11 hostiles.
+fix cost roughly 100 draw calls and 40k triangles across the 11 hostiles the level had at the
+time (now 9 - see the encounter note below).
 
 ### P5 — Weapon flat in shadow (FIXED)
 
@@ -422,6 +424,32 @@ Cost: +8 boxes, merged into the existing view-model batches. Draw calls unchange
 **Still open:** the emissive reticle is not clearly visible through the aperture in the captures.
 The sight picture is usable — a hostile at 15 m is plainly visible through it — but the red dot does
 not read. Not chased further; it is a small, self-contained follow-up.
+
+### Encounter rebalance (player request)
+
+The garrison was 11 and weighted toward the far end - 6 of the 11 were in the yard alone - so the
+fight got denser exactly as the player ran low on the ammunition to handle it, while the first two
+thirds of the walk was quiet. Now 9:
+
+| Zone | Was | Now |
+| --- | --- | --- |
+| Bay mouth | 0 | **2** (new; first contact before the opening shot is over) |
+| Canyon | 3 | 2 |
+| Yard | 6 (4 ground + 2 catwalk) | 3 (2 ground + 1 catwalk) |
+| Pier head | 2 | 2 |
+
+The catwalk hostile is kept so the "look up mid-fight" beat survives, and both pier-head hostiles
+are kept so the finale still has a shape.
+
+`MISSION_CONFIG.totalHostiles` was deleted while doing this. It was a second source of truth for a
+number the level already owns, and it had silently gone stale - the HUD read "HOSTILES 09 / 11"
+straight after the change. The counter and the end card now both read `EnemyManager.totalCount`.
+
+**Verified in play:** the HUD reads 09 / 09, both new hostiles stand clear of geometry in the open
+lane ~13 m from spawn and are visible in the opening shot, and they engage. This run also produced
+the **first genuine confirmation of player death and the mission-failed flow** - the K.I.A. card
+appeared with TIME 0:33 and HOSTILES DOWN 0 / 9, correctly derived. Mission *completion* is still
+unverified.
 
 ### P16 — The view-model responded to window resizes differently from the world (FIXED)
 

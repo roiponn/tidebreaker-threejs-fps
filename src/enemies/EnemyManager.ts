@@ -174,6 +174,16 @@ export class EnemyManager {
     }
   }
 
+  /**
+   * Hostiles actually spawned. The mission counter reads this rather than a
+   * configured constant: the constant was a second source of truth for a
+   * number the level already owns, and it silently went stale the moment the
+   * encounter layout changed.
+   */
+  get totalCount(): number {
+    return this.enemies.length;
+  }
+
   get aliveCount(): number {
     let count = 0;
     for (const e of this.enemies) if (e.state !== 'dead' && e.state !== 'dying') count++;

@@ -133,5 +133,4 @@ export const MISSION_CONFIG = {
   introDurationSec: 6.5,
   /** Radius around the extraction marker that completes the mission. */
   extractRadius: 3.2,
-  totalHostiles: 11,
 } as const;
