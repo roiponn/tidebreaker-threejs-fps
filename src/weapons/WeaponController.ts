@@ -47,12 +47,18 @@ export type WeaponState = 'ready' | 'firing' | 'reloading';
  * subtended more than the whole frame height, which is the other half of why
  * it looked like a slab rather than a weapon.
  *
- * At z = -0.50 the grip sits ~21° off axis and ~20° low, the muzzle ~12°/11°,
- * and the rifle's height covers about half the frame - normal hip-fire
- * framing. These are screen-composition numbers, not anatomical ones: a
- * view-model is posed for the camera, not for a shoulder.
+ * At z = -0.50 the grip sits ~16° off axis and ~18° low. The lateral offset
+ * was 0.196, which put the sight 40-46% of the way to the right edge - and
+ * because the view-model camera is locked to a VERTICAL fov, that fraction
+ * grows as the window narrows, so on a 4:3-ish window the weapon fanned out
+ * past the edge. Measured with tools/framingProbe.ts rather than guessed:
+ * 0.146 puts the sight at 0.26-0.34 NDC across every window shape from 4:3 to
+ * ultrawide, which reads as "held at the hip" without crowding the frame.
+ *
+ * These are screen-composition numbers, not anatomical ones: a view-model is
+ * posed for the camera, not for a shoulder.
  */
-const HIP_POSITION = new THREE.Vector3(0.196, -0.178, -0.500);
+const HIP_POSITION = new THREE.Vector3(0.146, -0.163, -0.500);
 /**
  * Yaw swings the stock toward +X and the muzzle toward the centre, which is
  * how the butt is kept out of frame now that it is no longer hidden behind the
@@ -96,7 +102,7 @@ const SPRINT_ROTATION = new THREE.Euler(0.135, 0.255, -0.115);
 const VIEWMODEL_ROT_LIMIT = 0.060;
 const VIEWMODEL_POS_LIMIT = 0.022;
 
-const RETRACT_POSITION = new THREE.Vector3(0.190, -0.232, -0.430);
+const RETRACT_POSITION = new THREE.Vector3(0.145, -0.214, -0.430);
 const RETRACT_ROTATION = new THREE.Euler(0.075, 0.235, 0.055);
 
 export class WeaponController {
