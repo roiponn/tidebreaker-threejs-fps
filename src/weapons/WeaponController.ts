@@ -120,6 +120,10 @@ export class WeaponController {
   private shotsInBurst = 0;
   private spreadBloom = 0;
   private triggerHeld = false;
+  /** A pulled trigger waiting for the sight to finish coming up. */
+  private shotArmed = false;
+  /** Seconds the sight stays up after the trigger is released. */
+  private adsHold = 0;
   private hasFired = false;
 
   // Animation layers.
@@ -167,7 +171,29 @@ export class WeaponController {
   // Input
   // ------------------------------------------------------------------
 
-  setTrigger(held: boolean): void {
+  /**
+   * FORCED ADS.
+   *
+   * This weapon has no hip fire. Pulling the trigger does not fire a round; it
+   * *commits to a shot*, which means raising the sight, waiting for it to
+   * settle on the screen centre, and only then releasing the round. Everything
+   * downstream depends on that: the boss fight's weak points are designed to be
+   * scoped, and a hip-fire escape hatch would quietly remove the reason the
+   * sight exists.
+   *
+   * The latch is what makes a single click work. A tap is shorter than the ADS
+   * transition, so without it the input would be gone by the time the sight
+   * arrived and the shot would be silently dropped - which reads as the game
+   * ignoring you. A tap therefore ARMS one shot, held until the sight is up.
+   */
+  setTrigger(held: boolean, pressedThisFrame = false): void {
+    // Arm on the PRESS EVENT, not on the polled held-state.
+    //
+    // A click that begins and ends between two frames never appears in the
+    // polled state at all, so a fast tap - or any tap at all during a frame
+    // spike - was silently swallowed. The brief is explicit that a short click
+    // must not lose the input, and the edge is the only signal that survives.
+    if (pressedThisFrame || (held && !this.triggerHeld)) this.shotArmed = true;
     this.triggerHeld = held;
   }
 
@@ -205,7 +231,21 @@ export class WeaponController {
     // ?weaponpose=ads must drive the real blend, not just the pose: the FOV,
     // the reticle brightness and the sway suppression all key off adsBlend, so
     // pinning only the pose would show a pose nobody ever sees.
-    const adsTarget = (wantsAds || this.debugPose === 'ads') && canAds ? 1 : 0;
+    // The sight comes up for the trigger as well as for the aim button, and
+    // lingers briefly after the trigger is released so a burst-tap-burst does
+    // not pump the weapon up and down. Sprinting and reloading lower it - but
+    // they also block firing entirely (see updateFiring), so there is no path
+    // by which a round leaves the barrel from the hip.
+    if (this.triggerHeld || this.shotArmed) {
+      this.adsHold = WEAPON_CONFIG.adsHoldAfterFire;
+    } else if (this.adsHold > 0) {
+      this.adsHold = Math.max(0, this.adsHold - dt);
+    }
+    const forcedAds = this.triggerHeld || this.shotArmed || this.adsHold > 0;
+    // An armed shot that can never be taken has to be dropped, or the weapon
+    // stays raised forever after a trigger pull that began during a sprint.
+    if (this.shotArmed && !canAds) this.shotArmed = false;
+    const adsTarget = (wantsAds || forcedAds || this.debugPose === 'ads') && canAds ? 1 : 0;
     const previousAds = this.adsBlend > 0.5;
     // ADS uses a fixed-time approach rather than a damp so the transition
     // duration is exactly WEAPON_CONFIG.adsTime and can be tuned to the audio.
@@ -231,8 +271,13 @@ export class WeaponController {
   private updateFiring(dt: number, sprinting: boolean, moveSpeed: number, crouched: boolean): void {
     this.fireTimer -= dt;
 
+    // The sight must be fully up. Not "mostly" - a partial sight picture that
+    // still fires is hip fire with extra steps.
+    const sightReady = this.adsBlend >= 0.999;
+    const wantsShot = this.triggerHeld || this.shotArmed;
     const canFire =
-      this.triggerHeld &&
+      wantsShot &&
+      sightReady &&
       this.state !== 'reloading' &&
       !sprinting &&
       this.fireTimer <= 0;
@@ -240,6 +285,9 @@ export class WeaponController {
     if (canFire) {
       if (this.magAmmo > 0) {
         this.fire(moveSpeed, crouched);
+        // The armed shot is spent. Holding the trigger re-arms nothing - the
+        // `triggerHeld` branch keeps automatic fire going on its own.
+        this.shotArmed = false;
         this.fireTimer = 60 / WEAPON_CONFIG.rpm;
       } else {
         this.bus.emit('weapon:dryFire');

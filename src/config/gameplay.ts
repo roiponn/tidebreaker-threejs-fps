@@ -80,6 +80,14 @@ export const WEAPON_CONFIG = {
   spreadRecovery: 0.055,
 
   adsTime: 0.19,
+  /**
+   * How long the sight stays up after the trigger is released.
+   *
+   * Long enough that tapping does not pump the weapon, short enough that the
+   * player returns to a wide view when they stop shooting. This exists because
+   * hip fire is disabled - see WeaponController.setTrigger().
+   */
+  adsHoldAfterFire: 0.55,
   reloadTime: 1.18,
   reloadEmptyTime: 2.95,
   /** When in the reload the magazine actually swaps (drives ammo counter). */

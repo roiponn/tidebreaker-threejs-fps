@@ -54,6 +54,65 @@ export interface GameEvents {
   'mission:objective': { text: string };
   'mission:complete': { timeSec: number; kills: number; accuracy: number };
   'mission:failed': void;
+  /** A radio or PA line. `speaker` null clears the current line. */
+  'mission:radio': { speaker: string | null; text: string | null };
+  /** Mission state changed. Systems react to this rather than polling. */
+  'mission:state': { state: string; previous: string };
+  /** Beat cues the world systems subscribe to. */
+  'mission:gatekeeperSpawn': void;
+  'mission:gateOpen': void;
+  'mission:bossSpawn': void;
+  'mission:bossDown': void;
+  'mission:truthReveal': void;
+  'mission:extraction': void;
+  'mission:emergencyLighting': { on: boolean };
+
+  // --- WARDEN-03, the final boss ------------------------------------------
+  //
+  // ADDITIVE ONLY. The boss owns no other system: it never touches the HUD,
+  // the lighting rig, the mission flags or the player's health directly. It
+  // narrates itself through these events and lets whoever cares subscribe,
+  // which is the same contract the weapon has with the muzzle flash.
+  //
+  // In particular `boss:playerHit` is a REQUEST, not an application of damage:
+  // the boss does not own the player, so it describes the blow and lets the
+  // player workstream decide what it costs.
+  'boss:spawned': { name: string; position: THREE.Vector3 };
+  /** Phase 1 sealed, 2 overheating, 3 emergency power. Fired on entry. */
+  'boss:phase': { phase: number; name: string };
+  'boss:relayDown': { index: number; remaining: number; position: THREE.Vector3 };
+  'boss:coolantExposed': void;
+  /** Staged destruction of the coolant stack: 0 intact, 2 about to fail. */
+  'boss:coolantStage': { stage: number; health01: number };
+  'boss:coolantDown': void;
+  'boss:armourShed': { position: THREE.Vector3 };
+  'boss:coreExposed': void;
+  'boss:coreDown': void;
+  'boss:defeated': { name: string };
+  'boss:weakPointHit': {
+    kind: 'relay' | 'coolant' | 'core';
+    point: THREE.Vector3;
+    normal: THREE.Vector3;
+    damage: number;
+    /** Remaining health of that weak point, 0..1. Drives the boss HUD bar. */
+    health01: number;
+    destroyed: boolean;
+  };
+  /** A round that hit armour instead of a weak point. `absorbed` is 0..1. */
+  'boss:armourHit': { point: THREE.Vector3; normal: THREE.Vector3; absorbed: number };
+  /** Wind-up begins. `windup` is the dodge window, in seconds. */
+  'boss:attack': { kind: string; windup: number; position: THREE.Vector3 };
+  'boss:attackFired': { kind: string; position: THREE.Vector3 };
+  'boss:playerHit': { kind: string; amount: number; fromDirection: THREE.Vector3 };
+  /** Fire-suppressant in the player's face. `blind` is 0..1 screen occlusion. */
+  'boss:suppressant': { active: boolean; blind: number };
+  'boss:stagger': void;
+  /**
+   * The boss REFUSED an action because it would have pointed at the people it
+   * believes it is protecting. Emitted so the beat is observable in a trace -
+   * see the story constraint in Warden03Controller.
+   */
+  'boss:constrained': { reason: 'protectedVolume'; kind: string };
 
   'quality:changed': void;
   'hitmarker': { headshot: boolean; killed: boolean };

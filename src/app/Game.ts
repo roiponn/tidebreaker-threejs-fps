@@ -326,18 +326,35 @@ export class Game {
     observer.observe(this.canvas);
     this.disposer.onDispose(() => observer.disconnect());
 
+    // POINTER LOCK IS NOT A GATE ON MISSION PROGRESS.
+    //
+    // beginMission() used to be called only from here, on lock acquired. That
+    // makes the entire game unreachable in any browser or embedded context
+    // that refuses pointer lock, and it makes "did the game start" depend on a
+    // permission the player never sees. The two concerns are now separate:
+    // clicking the briefing starts the mission, and pointer lock is requested
+    // alongside it as a comfort feature that can fail without consequence.
     this.input.onLockChange = (locked) => {
       if (locked) {
-        this.overlays.hideBriefing();
-        if (this.director.phase === 'briefing') this.beginMission();
-      } else if (this.director.phase === 'active' || this.director.phase === 'intro') {
-        this.overlays.showBriefing(true);
+        this.overlays.hideMouseHint();
+        return;
+      }
+      // Lost lock mid-mission: offer it back without throwing the player out
+      // of the run. The mission keeps its state; only the look input pauses.
+      if (this.director.phase === 'active' || this.director.phase === 'intro') {
+        this.overlays.showMouseHint();
       }
     };
 
     this.overlays.onStart = () => {
       void this.audio.start();
+      // Start the mission first, unconditionally. The lock request is a
+      // separate, best-effort call; if the browser refuses it the player still
+      // gets a playable game and a prompt to click for mouse look.
+      this.overlays.hideBriefing();
+      if (this.director.phase === 'briefing') this.beginMission();
       this.input.requestLock();
+      this.overlays.onRecaptureMouse = () => this.input.requestLock();
     };
     this.overlays.onRestart = () => {
       this.overlays.hideEnd();
@@ -584,7 +601,7 @@ export class Game {
 
     // --- 4. weapon (after the camera: the view-model is parented to it) ---
     if (playable) {
-      this.weapon.setTrigger(this.input.firing);
+      this.weapon.setTrigger(this.input.firing, this.input.firePressed);
       if (this.input.wasPressed('reload')) this.weapon.requestReload();
     } else {
       this.weapon.setTrigger(false);

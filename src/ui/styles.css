@@ -618,3 +618,27 @@ body {
   text-align: left;
   line-height: 1.6;
 }
+
+/* Pointer-lock prompt. Deliberately small and non-modal: the mission runs on
+   behind it, so it must not read as a pause screen. */
+.mouse-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 16%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border: 1px solid rgba(255, 190, 120, 0.5);
+  background: rgba(6, 9, 14, 0.72);
+  color: #ffcf9a;
+  font: 500 12px/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.22em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 40;
+}
+.mouse-hint.show {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}

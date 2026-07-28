@@ -12,6 +12,7 @@ export class Overlays {
   private loaderFill: HTMLElement;
   private loaderStep: HTMLDivElement;
   private briefing: HTMLDivElement;
+  private mouseHint: HTMLDivElement;
   private endCard: HTMLDivElement;
   private endTitle: HTMLElement;
   private endSubtitle: HTMLElement;
@@ -23,6 +24,8 @@ export class Overlays {
 
   /** Set by the game; fired when the player clicks the briefing screen. */
   onStart: (() => void) | null = null;
+  /** Fired when the player clicks the pointer-lock prompt. */
+  onRecaptureMouse: (() => void) | null = null;
   onRestart: (() => void) | null = null;
 
   constructor(container: HTMLElement) {
@@ -34,6 +37,7 @@ export class Overlays {
     this.loaderFill = this.q('.loader .track i');
     this.loaderStep = this.q('.loader .step');
     this.briefing = this.q('.overlay.briefing');
+    this.mouseHint = this.q('.mouse-hint');
     this.endCard = this.q('.overlay.endcard');
     this.endTitle = this.q('.overlay.endcard h1');
     this.endSubtitle = this.q('.overlay.endcard h2');
@@ -44,6 +48,7 @@ export class Overlays {
     this.fatal = this.q('.fatal');
 
     this.briefing.addEventListener('click', () => this.onStart?.());
+    this.mouseHint.addEventListener('click', () => this.onRecaptureMouse?.());
     this.endCard.addEventListener('click', () => this.onRestart?.());
   }
 
@@ -79,6 +84,21 @@ export class Overlays {
 
   hideBriefing(): void {
     this.briefing.classList.remove('show');
+  }
+
+  /**
+   * Non-blocking prompt shown when pointer lock is unavailable or lost.
+   *
+   * Deliberately NOT the briefing screen: losing the mouse must not read as
+   * losing the run. The mission keeps running behind it and a click anywhere
+   * asks for the lock back.
+   */
+  showMouseHint(): void {
+    this.mouseHint.classList.add('show');
+  }
+
+  hideMouseHint(): void {
+    this.mouseHint.classList.remove('show');
   }
 
   // --- intro cinematics ---
@@ -129,6 +149,7 @@ const TEMPLATE = /* html */ `
   <div class="letterbox top"></div>
   <div class="letterbox bottom"></div>
   <div class="chatter"></div>
+  <div class="mouse-hint"><span>CLICK TO CAPTURE MOUSE</span></div>
 
   <div class="overlay briefing">
     <h1>TIDEBREAKER</h1>
