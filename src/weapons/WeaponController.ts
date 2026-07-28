@@ -249,8 +249,10 @@ export class WeaponController {
     const previousAds = this.adsBlend > 0.5;
     // ADS uses a fixed-time approach rather than a damp so the transition
     // duration is exactly WEAPON_CONFIG.adsTime and can be tuned to the audio.
-    const adsRate = 1 / WEAPON_CONFIG.adsTime;
-    this.adsBlend = clamp01(this.adsBlend + (adsTarget - this.adsBlend > 0 ? adsRate : -adsRate) * dt);
+    // ASYMMETRIC. Up quickly, down slowly - see WEAPON_CONFIG.adsLowerTime.
+    const rising = adsTarget > this.adsBlend;
+    const adsRate = rising ? 1 / WEAPON_CONFIG.adsTime : -1 / WEAPON_CONFIG.adsLowerTime;
+    this.adsBlend = clamp01(this.adsBlend + adsRate * dt);
     if (previousAds !== this.adsBlend > 0.5) {
       this.bus.emit('weapon:adsChanged', { ads: this.adsBlend > 0.5 });
     }
@@ -288,6 +290,7 @@ export class WeaponController {
         // The armed shot is spent. Holding the trigger re-arms nothing - the
         // `triggerHeld` branch keeps automatic fire going on its own.
         this.shotArmed = false;
+        this.adsHold = WEAPON_CONFIG.adsHoldAfterFire;
         this.fireTimer = 60 / WEAPON_CONFIG.rpm;
       } else {
         // Spend the armed shot on the dry fire too. Without this an empty

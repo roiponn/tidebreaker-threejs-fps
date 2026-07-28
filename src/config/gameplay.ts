@@ -87,7 +87,17 @@ export const WEAPON_CONFIG = {
    * player returns to a wide view when they stop shooting. This exists because
    * hip fire is disabled - see WeaponController.setTrigger().
    */
-  adsHoldAfterFire: 0.55,
+  adsHoldAfterFire: 1.15,
+  /**
+   * How long the sight takes to come back DOWN, versus `adsTime` to go up.
+   *
+   * Deliberately more than twice the rise. A sight that falls as fast as it
+   * rises turns every trigger tap into a full-amplitude pump, and a player who
+   * taps at a steady rate gets a metronome - which is exactly what "the scope
+   * shakes when firing" was. Rising fast is responsive; falling fast is just
+   * noise, because nothing the player is doing depends on it.
+   */
+  adsLowerTime: 0.42,
   reloadTime: 1.18,
   reloadEmptyTime: 2.95,
   /** When in the reload the magazine actually swaps (drives ammo counter). */
