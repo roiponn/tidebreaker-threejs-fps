@@ -184,7 +184,7 @@ const TEMPLATE = /* html */ `
     <h2>OPERATION TIDEBREAKER // FABRICATION LOCKDOWN</h2>
     <div class="rule"></div>
     <div class="body"></div>
-    <div class="controls">
+    <div class="controls desktop-brief-controls">
       <b>W A S D</b><span>Move</span>
       <b>MOUSE</b><span>Look</span>
       <b>LEFT MOUSE</b><span>Fire</span>
@@ -197,7 +197,13 @@ const TEMPLATE = /* html */ `
       <b>&#96;</b><span>Debug panel</span>
       <b>P</b><span>Restart</span>
     </div>
-    <div class="prompt">CLICK TO BEGIN INSERTION</div>
+    <div class="controls mobile-brief-controls">
+      <b>LEFT STICK</b><span>Move / push fully to sprint</span>
+      <b>RIGHT SWIPE</b><span>Look</span>
+      <b>FIRE / ADS</b><span>Shoot / aim</span>
+      <b>ACTION KEYS</b><span>Jump / reload / use / crouch</span>
+    </div>
+    <div class="prompt"><span class="desktop-start-copy">CLICK</span><span class="mobile-start-copy">TAP</span> TO BEGIN INSERTION</div>
   </div>
 
   <div class="truth-reveal">

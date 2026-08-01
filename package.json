@@ -6,7 +6,7 @@
   "description": "TIDEBREAKER - an original modern-military FPS vertical slice built with Three.js + TypeScript + Vite.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/build-worker.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

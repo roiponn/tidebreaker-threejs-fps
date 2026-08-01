@@ -127,6 +127,11 @@ export const DEFAULT_QUALITY: QualityLevel = 'high';
 export function detectQuality(): QualityLevel {
   const forced = new URLSearchParams(window.location.search).get('quality');
   if (forced === 'low' || forced === 'medium' || forced === 'high') return forced;
+  // Phones and tablets trade thermal headroom for battery life. Starting on
+  // the performance preset keeps long firefights stable; players can still
+  // force another preset with ?quality=medium or ?quality=high.
+  const touchDevice = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
+  if (touchDevice) return 'low';
   const dpr = window.devicePixelRatio || 1;
   const cores = navigator.hardwareConcurrency ?? 4;
   const gl = document.createElement('canvas').getContext('webgl2');

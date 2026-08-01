@@ -15,6 +15,12 @@ export class Input {
   private releasedThisFrame = new Set<string>();
   private mouseButtons = new Set<number>();
   private mousePressed = new Set<number>();
+  private virtualHeld = new Set<GameAction>();
+  private virtualPressed = new Set<GameAction>();
+  private virtualReleased = new Set<GameAction>();
+  private virtualFiring = false;
+  private virtualFirePressed = false;
+  private virtualAiming = false;
   private teardowns: Array<() => void> = [];
 
   mouseDeltaX = 0;
@@ -32,9 +38,10 @@ export class Input {
    * demo stays playable instead of dead.
    */
   softLock = false;
+  touchMode = false;
 
   /** Notified whenever capture mode changes (drives the non-modal retry hint). */
-  onLockChange: ((locked: boolean, mode: 'real' | 'soft' | 'none') => void) | null = null;
+  onLockChange: ((locked: boolean, mode: 'real' | 'soft' | 'touch' | 'none') => void) | null = null;
 
   constructor(private readonly element: HTMLElement) {
     this.teardowns.push(
@@ -53,6 +60,11 @@ export class Input {
   private softLockTimer = 0;
 
   requestLock(): void {
+    if (this.touchMode) {
+      this.locked = true;
+      this.onLockChange?.(true, 'touch');
+      return;
+    }
     // A soft lock is a fallback, not a terminal state. Clicking the hint must
     // still be allowed to upgrade it to real pointer lock.
     if (document.pointerLockElement === this.element) return;
@@ -77,6 +89,12 @@ export class Input {
 
   exitLock(): void {
     window.clearTimeout(this.softLockTimer);
+    if (this.touchMode) {
+      this.locked = false;
+      this.resetVirtualControls();
+      this.onLockChange?.(false, 'none');
+      return;
+    }
     if (document.pointerLockElement === this.element) {
       document.exitPointerLock();
       return;
@@ -91,30 +109,77 @@ export class Input {
   }
 
   isDown(action: GameAction): boolean {
+    if (this.virtualHeld.has(action)) return true;
     for (const code of KEY_BINDINGS[action]) if (this.held.has(code)) return true;
     return false;
   }
 
   wasPressed(action: GameAction): boolean {
+    if (this.virtualPressed.has(action)) return true;
     for (const code of KEY_BINDINGS[action]) if (this.pressedThisFrame.has(code)) return true;
     return false;
   }
 
   wasReleased(action: GameAction): boolean {
+    if (this.virtualReleased.has(action)) return true;
     for (const code of KEY_BINDINGS[action]) if (this.releasedThisFrame.has(code)) return true;
     return false;
   }
 
   get firing(): boolean {
-    return this.mouseButtons.has(MOUSE_BUTTON.fire);
+    return this.virtualFiring || this.mouseButtons.has(MOUSE_BUTTON.fire);
   }
 
   get firePressed(): boolean {
-    return this.mousePressed.has(MOUSE_BUTTON.fire);
+    return this.virtualFirePressed || this.mousePressed.has(MOUSE_BUTTON.fire);
   }
 
   get aiming(): boolean {
-    return this.mouseButtons.has(MOUSE_BUTTON.ads);
+    return this.virtualAiming || this.mouseButtons.has(MOUSE_BUTTON.ads);
+  }
+
+  /** Switches input capture from pointer lock to the on-screen touch controls. */
+  enableTouchMode(): void {
+    this.touchMode = true;
+    this.softLock = false;
+  }
+
+  /** Held + edge-tracked virtual button used by the mobile control surface. */
+  setVirtualAction(action: GameAction, down: boolean): void {
+    const wasDown = this.virtualHeld.has(action);
+    if (down === wasDown) return;
+    if (down) {
+      this.virtualHeld.add(action);
+      this.virtualPressed.add(action);
+    } else {
+      this.virtualHeld.delete(action);
+      this.virtualReleased.add(action);
+    }
+  }
+
+  setVirtualFire(down: boolean): void {
+    if (down && !this.virtualFiring) this.virtualFirePressed = true;
+    this.virtualFiring = down;
+  }
+
+  setVirtualAim(down: boolean): void {
+    this.virtualAiming = down;
+  }
+
+  /** Touch-look deltas join mouse deltas so the frame pipeline stays unchanged. */
+  addVirtualLook(deltaX: number, deltaY: number): void {
+    if (!this.locked) return;
+    this.mouseDeltaX += deltaX;
+    this.mouseDeltaY += deltaY;
+  }
+
+  resetVirtualControls(): void {
+    for (const action of this.virtualHeld) this.virtualReleased.add(action);
+    this.virtualHeld.clear();
+    this.virtualPressed.clear();
+    this.virtualFiring = false;
+    this.virtualFirePressed = false;
+    this.virtualAiming = false;
   }
 
   /** Call once at the end of every frame. */
@@ -122,6 +187,9 @@ export class Input {
     this.pressedThisFrame.clear();
     this.releasedThisFrame.clear();
     this.mousePressed.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
+    this.virtualFirePressed = false;
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
     this.wheelDelta = 0;
@@ -133,6 +201,9 @@ export class Input {
     this.teardowns.length = 0;
     this.held.clear();
     this.mouseButtons.clear();
+    this.virtualHeld.clear();
+    this.virtualPressed.clear();
+    this.virtualReleased.clear();
   }
 
   private handleKeyDown = (event: KeyboardEvent): void => {
@@ -155,6 +226,7 @@ export class Input {
   private handleBlur = (): void => {
     this.held.clear();
     this.mouseButtons.clear();
+    this.resetVirtualControls();
   };
 
   private handlePointerLockChange = (): void => {

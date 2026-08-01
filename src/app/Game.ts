@@ -34,6 +34,7 @@ import { VfxManager } from '@/effects/VfxManager';
 import { AudioEngine } from '@/audio/AudioEngine';
 
 import { Hud } from '@/ui/Hud';
+import { MobileControls } from '@/ui/MobileControls';
 import { Overlays } from '@/ui/Overlays';
 import { DebugPanel, type DebugState } from '@/debug/DebugPanel';
 import { MissionDirector, formatTime } from './MissionDirector';
@@ -94,6 +95,7 @@ export class Game {
   private audio = new AudioEngine();
 
   private hud!: Hud;
+  private mobileControls!: MobileControls;
   private overlays!: Overlays;
   private debugPanel!: DebugPanel;
   private director!: MissionDirector;
@@ -264,6 +266,8 @@ export class Game {
 
         this.input = new Input(this.canvas);
         this.disposer.track(this.input);
+        this.mobileControls = new MobileControls(this.uiRoot, this.input);
+        this.disposer.track(this.mobileControls);
         this.wireEvents();
         this.applyQuality(this.qualityLevel);
       });
@@ -411,7 +415,7 @@ export class Game {
     // clicking the briefing starts the mission, and pointer lock is requested
     // alongside it as a comfort feature that can fail without consequence.
     this.input.onLockChange = (locked, mode) => {
-      if (locked && mode === 'real') {
+      if (locked && (mode === 'real' || mode === 'touch')) {
         this.overlays.hideMouseHint();
         return;
       }
@@ -429,6 +433,7 @@ export class Game {
       // gets a playable game and a prompt to click for mouse look.
       this.overlays.hideBriefing();
       if (this.director.phase === 'briefing') this.beginMission();
+      this.mobileControls.setActive(true);
       this.input.requestLock();
       this.overlays.onRecaptureMouse = () => this.input.requestLock();
     };
@@ -441,11 +446,13 @@ export class Game {
       } else {
         this.restartFromBriefing(false);
       }
+      this.mobileControls.setActive(true);
       this.input.requestLock();
     };
     this.overlays.onTitle = () => {
       this.overlays.hideEnd();
       this.input.exitLock();
+      this.mobileControls.setActive(false);
       this.restartFromBriefing(true);
       this.overlays.showBriefing(false);
     };
@@ -1217,6 +1224,7 @@ export class Game {
       this.retries++;
       this.overlays.hideEnd();
       this.restoreCheckpointWorld(this.director.checkpoint);
+      this.mobileControls.setActive(true);
       this.input.requestLock();
       return;
     }
@@ -1231,6 +1239,7 @@ export class Game {
 
   private onMissionEnded(success: boolean): void {
     this.input.exitLock();
+    this.mobileControls.setActive(false);
     this.player.setFrozen(true);
     this.audio.setAmbienceLevel(0.2);
     const accuracy = this.ballistics.accuracy * 100;
