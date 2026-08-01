@@ -117,6 +117,8 @@ export class Hud {
   }
 
   private lastDamageDirection = new THREE.Vector3(0, 0, 1);
+  private readonly interactionKey =
+    navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches ? 'USE' : 'F';
 
   setHidden(hidden: boolean): void {
     this.hidden = hidden;
@@ -138,7 +140,7 @@ export class Hud {
   }
 
   setInteraction(text: string | null): void {
-    this.interaction.textContent = text ? `F  ${text}` : '';
+    this.interaction.textContent = text ? `${this.interactionKey}  ${text}` : '';
     this.interaction.classList.toggle('show', Boolean(text));
   }
 
@@ -255,7 +257,14 @@ export class Hud {
    * Clamped to the frame edge when off-screen so the player always knows
    * which way to go without a minimap.
    */
-  updateMarker(worldPosition: THREE.Vector3, camera: THREE.PerspectiveCamera, visible: boolean, label: string): void {
+  updateMarker(
+    worldPosition: THREE.Vector3,
+    camera: THREE.PerspectiveCamera,
+    visible: boolean,
+    label: string,
+    urgent = false,
+  ): void {
+    this.marker.classList.toggle('urgent', urgent && visible);
     if (!visible) {
       this.marker.style.opacity = '0';
       return;

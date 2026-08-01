@@ -28,6 +28,7 @@ import { PlayerCamera } from '@/player/PlayerCamera';
 import { Player } from '@/player/Player';
 import { WeaponController } from '@/weapons/WeaponController';
 import { Ballistics } from '@/weapons/Ballistics';
+import { EnemyManager } from '@/enemies/EnemyManager';
 import { RobotEnemyManager, type RobotSpawn } from '@/enemies/RobotEnemyManager';
 import { ChainTest } from '@/debug/ChainTest';
 import { VfxManager } from '@/effects/VfxManager';
@@ -87,6 +88,7 @@ export class Game {
   private view!: PlayerCamera;
   private player!: Player;
   private weapon!: WeaponController;
+  private humanoids!: EnemyManager;
   private enemies!: RobotEnemyManager;
   private gatekeeper!: GatekeeperController;
   private warden!: Warden03Controller;
@@ -205,6 +207,11 @@ export class Game {
         this.scene.add(this.view.camera, this.view.weaponCamera);
 
         this.player = new Player(this.collision, this.view, this.bus);
+        this.humanoids = new EnemyManager(this.materials, this.collision, this.bus);
+        this.disposer.track(this.humanoids);
+        this.scene.add(this.humanoids.group);
+        this.humanoids.spawnAll(this.level.enemySpawns);
+
         this.enemies = new RobotEnemyManager(this.materials, this.collision, this.bus);
         this.disposer.track(this.enemies);
         this.scene.add(this.enemies.group);
@@ -243,7 +250,7 @@ export class Game {
 
         this.ballistics = new Ballistics(
           this.collision,
-          this.enemies,
+          [this.humanoids, this.enemies],
           this.vfx,
           this.bus,
           this.player,
@@ -278,7 +285,7 @@ export class Game {
       // ?posetest=1 lines hostiles up at fixed distances with the AI frozen,
       // so joint quality can be inspected repeatably.
       if (params.has('posetest')) {
-        this.enemies.setPoseTest(
+        this.humanoids.setPoseTest(
           true,
           this.level.playerSpawn,
           this.level.playerSpawnYaw,
@@ -377,13 +384,6 @@ export class Game {
   }
 
   private buildRobotSpawns(): RobotSpawn[] {
-    const exterior: RobotSpawn[] = this.level.enemySpawns.map((spawn, index) => ({
-      kind: spawn.elevated || index % 3 === 0 ? 'SCOUT' : 'SENTINEL',
-      zone: 'exterior',
-      position: spawn.position.clone(),
-      patrolTo: spawn.patrolTo.clone(),
-      activationX: spawn.activationX,
-    }));
     const interior: RobotSpawn[] = this.level.factory.robotSpawns.map((spawn) => ({
       kind: spawn.type === 'scout' ? 'SCOUT' : 'SENTINEL',
       zone: 'interior',
@@ -391,7 +391,7 @@ export class Game {
       patrolTo: spawn.patrolTo.clone(),
       activationX: spawn.activationZ,
     }));
-    return [...exterior, ...interior];
+    return interior;
   }
 
   // ------------------------------------------------------------------
@@ -597,7 +597,10 @@ export class Game {
       },
       applyPracticals: (): void => this.level.practicals.refresh(),
       setQuality: (level: QualityLevel): void => this.applyQuality(level),
-      setEnemiesEnabled: (enabled: boolean): void => this.enemies.setEnabled(enabled),
+      setEnemiesEnabled: (enabled: boolean): void => {
+        this.humanoids.setEnabled(enabled);
+        this.enemies.setEnabled(enabled);
+      },
       setParticleScale: (scale: number): void => {
         this.particleScale = scale;
       },
@@ -637,6 +640,7 @@ export class Game {
   }
 
   private restoreCheckpointWorld(checkpoint: Checkpoint): void {
+    this.humanoids.reset();
     this.enemies.reset();
     this.gatekeeper.reset();
     this.gatekeeper.group.visible = false;
@@ -658,7 +662,7 @@ export class Game {
       return;
     }
 
-    this.enemies.clearZone('exterior');
+    this.humanoids.clearAll();
     this.director.setFlag('moduleAcquired', true);
     this.level.factory.setAccessModuleAcquired(true);
     if (checkpoint === 'GATEKEEPER_DEFEATED') {
@@ -692,7 +696,7 @@ export class Game {
     this.engagementOpen = true;
 
     if (atOrPast('GATEKEEPER_INTRO')) {
-      this.enemies.clearZone('exterior');
+      this.humanoids.clearAll();
       this.director.setFlag('exteriorHostilesRemaining', 0);
     }
     if (state === 'GATEKEEPER_INTRO' || state === 'GATEKEEPER_ACTIVE') {
@@ -879,6 +883,7 @@ export class Game {
       if (acting || this.engagementGrace > 4) this.engagementOpen = true;
     }
     const combatEngaged = this.director.combatActive && this.engagementOpen;
+    this.humanoids.update(dt, elapsed, this.player.eye, this.player.alive, combatEngaged);
     this.enemies.update(dt, elapsed, this.player.eye, this.player.alive, combatEngaged);
     this.gatekeeper.update(
       dt,
@@ -926,7 +931,7 @@ export class Game {
     this.director.update(
       dt,
       this.player.position.x,
-      this.enemies.aliveInZone('exterior'),
+      this.humanoids.aliveCount,
       extractionDistance,
       this.player.alive,
     );
@@ -975,7 +980,7 @@ export class Game {
     if (document.body.dataset.tick !== tick) document.body.dataset.tick = tick;
     document.body.dataset.blast = this.vfx.blastState;
     if (this.enemyTrace) {
-      document.body.dataset.enemies = `${this.enemies.stateTrace} GK:${this.gatekeeper.stateTrace}`;
+      document.body.dataset.enemies = `H:${this.humanoids.stateTrace} R:${this.enemies.stateTrace} GK:${this.gatekeeper.stateTrace}`;
     }
     // Render statistics, mirrored for the same reason as everything else here:
     // the debug panel needs a keypress and a focused canvas, neither of which
@@ -1031,13 +1036,7 @@ export class Game {
     if (!this.director.inputPermissions.interact) return;
     if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
       this.accessModule.getWorldPosition(this.tmpVec);
-      if (this.tmpVec.distanceTo(this.player.position) <= 2.6) {
-        this.accessModule.visible = false;
-        this.accessModule = null;
-        this.director.setFlag('moduleAcquired', true);
-        this.level.factory.setAccessModuleAcquired(true);
-        return;
-      }
+      if (this.tmpVec.distanceTo(this.player.position) <= 4.2 && this.recoverAccessModule()) return;
     }
 
     const result = this.level.factory.interact(this.player.position);
@@ -1048,6 +1047,15 @@ export class Game {
     } else if (result.kind === 'hostage_release_terminal') {
       this.director.setFlag('hostagesReleased', true);
     }
+  }
+
+  private recoverAccessModule(): boolean {
+    if (!this.accessModule?.visible) return false;
+    this.accessModule.visible = false;
+    this.accessModule = null;
+    this.director.setFlag('moduleAcquired', true);
+    this.level.factory.setAccessModuleAcquired(true);
+    return true;
   }
 
   private updateFactoryHazards(dt: number): void {
@@ -1066,6 +1074,12 @@ export class Game {
   private updateMissionFlags(): void {
     const factory = this.level.factory;
     const position = this.player.position;
+    // Walking directly over the bright module is enough to collect it. The
+    // wider manual USE/F radius remains for players who stop beside the wreck.
+    if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
+      this.accessModule.getWorldPosition(this.tmpVec);
+      if (this.tmpVec.distanceTo(position) <= 1.65) this.recoverAccessModule();
+    }
     const inside = position.z > 14 && position.x > 12 && position.x < 46;
     if (inside) this.director.setFlag('insideFactory', true);
     if (position.distanceTo(factory.objectivePoints.hostageObservation) < 11) {
@@ -1095,7 +1109,7 @@ export class Game {
 
   private updateHud(dt: number): void {
     const state = this.director.state;
-    const exteriorRemaining = this.enemies.aliveInZone('exterior');
+    const exteriorRemaining = this.humanoids.aliveCount;
     const interiorRemaining = this.enemies.aliveInZone('interior');
     const counterLabel = state.startsWith('BOSS_')
       ? `WEAK POINT ${(this.warden.weakPointHealth01 * 100).toFixed(0)}%`
@@ -1114,8 +1128,8 @@ export class Game {
       health: this.player.healthFraction,
       crouched: this.player.stance === 'crouch',
       sprinting: this.player.sprinting,
-      enemiesRemaining: this.enemies.aliveCount,
-      enemiesTotal: this.enemies.totalCount,
+      enemiesRemaining: this.humanoids.aliveCount + this.enemies.aliveCount,
+      enemiesTotal: this.humanoids.totalCount + this.enemies.totalCount,
       cameraYaw: this.view.yaw,
       counterLabel,
     });
@@ -1135,7 +1149,10 @@ export class Game {
       objectivePoint,
       this.view.camera,
       this.director.phase === 'active' && state !== 'TRUTH_REVEAL',
-      `${objectiveDistance.toFixed(0)}M`,
+      state === 'ACCESS_MODULE_DROPPED'
+        ? `ACCESS MODULE // ${objectiveDistance.toFixed(0)}M`
+        : `${objectiveDistance.toFixed(0)}M`,
+      state === 'ACCESS_MODULE_DROPPED',
     );
 
     const stats = this.vfx.stats;
@@ -1161,8 +1178,8 @@ export class Game {
     }
     if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
       this.accessModule.getWorldPosition(this.tmpVec);
-      if (this.tmpVec.distanceTo(this.player.position) <= 2.6) {
-        this.hud.setInteraction('RECOVER ACCESS MODULE');
+      if (this.tmpVec.distanceTo(this.player.position) <= 4.2) {
+        this.hud.setInteraction('TAKE THE GLOWING ACCESS MODULE');
         return;
       }
     }
@@ -1245,7 +1262,10 @@ export class Game {
     const accuracy = this.ballistics.accuracy * 100;
     this.overlays.showEnd(success, [
       ['TIME', formatTime(this.director.missionTime)],
-      ['HOSTILES DOWN', `${this.enemies.killCount} / ${this.enemies.totalCount}`],
+      [
+        'HOSTILES DOWN',
+        `${this.humanoids.killCount + this.enemies.killCount} / ${this.humanoids.totalCount + this.enemies.totalCount}`,
+      ],
       ['ACCURACY', `${accuracy.toFixed(0)}%`],
       ['ROUNDS FIRED', String(this.ballistics.shotsFired)],
       ['CHECKPOINT RETRIES', String(this.retries)],
@@ -1253,7 +1273,7 @@ export class Game {
     if (success) {
       this.bus.emit('mission:complete', {
         timeSec: this.director.missionTime,
-        kills: this.enemies.killCount,
+        kills: this.humanoids.killCount + this.enemies.killCount,
         accuracy: this.ballistics.accuracy,
       });
     }

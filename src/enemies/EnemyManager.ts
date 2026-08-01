@@ -126,7 +126,7 @@ export class EnemyManager {
     private readonly collision: CollisionWorld,
     private readonly bus: EventBus,
   ) {
-    this.group.name = 'Enemies';
+    this.group.name = 'ExteriorHumanoidRobots';
   }
 
   spawnAll(spawns: EnemySpawn[]): void {
@@ -860,6 +860,15 @@ export class EnemyManager {
       enemy.rig.root.position.copy(enemy.home);
     }
     this.killCount = 0;
+  }
+
+  /** Marks the exterior encounter as complete when restoring a later checkpoint. */
+  clearAll(): void {
+    for (const enemy of this.enemies) {
+      enemy.health = 0;
+      enemy.state = 'dead';
+      enemy.rig.root.visible = false;
+    }
   }
 
   dispose(): void {

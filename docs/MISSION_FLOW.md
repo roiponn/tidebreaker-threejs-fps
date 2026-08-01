@@ -3,7 +3,7 @@
 | 区間 | 主な行動 | 完了条件 | チェックポイント |
 | --- | --- | --- | --- |
 | Briefing / insertion | 作戦確認、短い一人称導入 | 導入タイマー終了 | EXTERIOR_ENTRY |
-| Exterior combat | SCOUT/SENTINELを排除 | 外周残存数が3以下 | EXTERIOR_ENTRY |
+| Exterior combat | ヒューマノイド警備ロボットを排除 | 外周残存数が3以下 | EXTERIOR_ENTRY |
 | GATEKEEPER | 側面を取り、排熱時にコイル攻撃 | GATEKEEPER撃破 | GATEKEEPER_DEFEATED |
 | Access module / gate | Fで回収、外部端末へ挿入 | シャッター開放 | GATEKEEPER_DEFEATED |
 | Loading / manufacturing | 工場侵入、設備危険とロボット戦 | 屋内ロボット全排除、中央制御到達 | FACTORY_ENTRY |
@@ -16,7 +16,7 @@
 
 重要な操作物:
 
-- アクセスモジュール: GATEKEEPER死亡途中に物理オブジェクトとして落下。2.6m以内でF。
+- アクセスモジュール: GATEKEEPER死亡途中に発光して落下。専用HUDマーカーを常時表示し、4.2m以内でF/USE、真上まで歩けば自動取得。
 - ゲート端末: モジュール取得後のみready。Fでシャッターのsolid collisionを徐々に解除。
 - 人質解放端末: WARDEN-03撃破後のみready。
 - 危険設備: ロボットアーム、蒸気、コンベア。予備動作とactive contactを分離。

@@ -31,7 +31,7 @@ interface WardenHit {
 
 type PlayerShotHit =
   | { kind: 'world'; hit: RaycastHit }
-  | { kind: 'enemy'; hit: CombatTargetHit }
+  | { kind: 'enemy'; hit: CombatTargetHit; manager: CombatTargetManager }
   | { kind: 'gatekeeper'; hit: GatekeeperHit }
   | { kind: 'warden'; hit: WardenHit };
 
@@ -58,7 +58,7 @@ export class Ballistics {
 
   constructor(
     private readonly collision: CollisionWorld,
-    private readonly enemies: CombatTargetManager,
+    private readonly enemies: readonly CombatTargetManager[],
     private readonly vfx: VfxManager,
     private readonly bus: EventBus,
     private readonly player: Player,
@@ -72,7 +72,6 @@ export class Ballistics {
     const range = WEAPON_CONFIG.range;
 
     const worldHit = this.collision.raycast(origin, direction, range);
-    const enemyHit = this.enemies.raycast(origin, direction, range);
     const gatekeeperHit = this.gatekeeper?.raycast(origin, direction, range) ?? null;
     const wardenHit = this.warden?.raycast(origin, direction, range) ?? null;
 
@@ -80,9 +79,12 @@ export class Ballistics {
     // distance tie is treated as cover instead of allowing a shot through it.
     let resolved: PlayerShotHit | null = worldHit ? { kind: 'world', hit: worldHit } : null;
     let nearestDistance = worldHit?.distance ?? range + 1;
-    if (enemyHit && enemyHit.distance < nearestDistance) {
-      resolved = { kind: 'enemy', hit: enemyHit };
-      nearestDistance = enemyHit.distance;
+    for (const manager of this.enemies) {
+      const enemyHit = manager.raycast(origin, direction, range);
+      if (enemyHit && enemyHit.distance < nearestDistance) {
+        resolved = { kind: 'enemy', hit: enemyHit, manager };
+        nearestDistance = enemyHit.distance;
+      }
     }
     if (gatekeeperHit && gatekeeperHit.distance < nearestDistance) {
       resolved = { kind: 'gatekeeper', hit: gatekeeperHit };
@@ -104,7 +106,7 @@ export class Ballistics {
           : 1;
       const damage = WEAPON_CONFIG.damage * zoneScale;
       this.incident.copy(direction);
-      const killed = this.enemies.damage(hit.enemy, damage, this.incident, hit.headshot);
+      const killed = resolved.manager.damage(hit.enemy, damage, this.incident, hit.headshot);
       this.bus.emit('impact:enemy', {
         point: hit.point,
         normal: hit.normal,

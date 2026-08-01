@@ -355,6 +355,26 @@ body {
   transform: rotate(45deg);
 }
 
+.marker.urgent {
+  color: #62f4d0;
+  font-weight: 700;
+  text-shadow: 0 0 12px rgba(70, 240, 200, 0.72), 0 1px 8px rgba(0, 0, 0, 0.95);
+}
+
+.marker.urgent .glyph {
+  width: 19px;
+  height: 19px;
+  border: 2px solid #62f4d0;
+  background: rgba(70, 240, 200, 0.12);
+  box-shadow: 0 0 16px rgba(70, 240, 200, 0.8);
+  animation: module-marker-pulse 0.85s ease-in-out infinite alternate;
+}
+
+@keyframes module-marker-pulse {
+  from { transform: rotate(45deg) scale(0.88); opacity: 0.62; }
+  to { transform: rotate(45deg) scale(1.12); opacity: 1; }
+}
+
 .interaction {
   position: absolute;
   left: 50%;

@@ -4,7 +4,7 @@ import { chamferBox, mergeGeometries, trs } from '@/environment/GeometryKit';
 import type { MaterialLibrary } from '@/materials/MaterialLibrary';
 
 /**
- * Hostile soldier - model and procedural animation.
+ * Humanoid security robot - model and procedural animation.
  *
  * The brief asks for a *minimal* enemy, so there is no skeletal rig and no
  * animation clips. Instead the figure is a small hierarchy of rigid parts
@@ -12,8 +12,8 @@ import type { MaterialLibrary } from '@/materials/MaterialLibrary';
  * ranges this level fights at (10-40m) that reads convincingly, and it costs
  * essentially nothing.
  *
- * READABILITY: every soldier carries a small amber IR strobe on the shoulder
- * and has a lighter-toned helmet band. Dark scenes are only cinematic if the
+ * READABILITY: every unit carries a small amber status strobe on the shoulder
+ * and a bright horizontal face sensor. Dark scenes are only cinematic if the
  * player can still find the enemy - this is the deliberate mechanism for that,
  * rather than raising the ambient light and flattening the whole image.
  */
@@ -52,8 +52,11 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
     return g;
   };
 
-  const fatigue = mats.soldierFatigue();
-  const gear = mats.soldierGear();
+  // The original biped animation is retained, but fabric and skin-facing
+  // surfaces are replaced with industrial metal so the silhouette reads as a
+  // humanoid machine rather than a human combatant.
+  const fatigue = mats.steelPainted();
+  const gear = mats.steelBare();
   const metal = mats.steelBare();
 
   /** Non-uniformly scales a geometry in place (for squashed domes). */
@@ -81,7 +84,7 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   };
 
   const root = new THREE.Group();
-  root.name = 'Soldier';
+  root.name = 'HumanoidSecurityRobot';
 
   // --- hips / pelvis ---
   const hips = new THREE.Group();
@@ -179,6 +182,17 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
       'head',
     ),
   );
+  // A single unbroken sensor bar is the fastest close/far read that this is a
+  // machine. It also gives the player a stable headshot landmark in the rain.
+  const faceSensor = new THREE.Mesh(
+    keep(chamferBox(0.105, 0.025, 0.018, 0.006, 1)),
+    mats.emissive('humanoidRobotSensor', 0xff7a32, 5.5),
+  );
+  faceSensor.name = 'humanoidRobotSensor';
+  faceSensor.position.set(0, 0.035, 0.168);
+  faceSensor.castShadow = false;
+  faceSensor.receiveShadow = false;
+  head.add(faceSensor);
   // Helmet, NVG mount, rails and visor merged into ONE gear-material mesh.
   // Eleven soldiers on screen make per-part meshes a real draw-call problem.
   const helmetGeo = keep(new THREE.SphereGeometry(0.115, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.62));
@@ -361,7 +375,7 @@ export function buildSoldier(mats: MaterialLibrary): SoldierRig {
   const rightLeg = makeLeg(1);
   hips.add(leftLeg, rightLeg);
 
-  // --- IR strobe: the readability guarantee ---
+  // --- status strobe: the readability guarantee ---
   const strobeGeo = keep(new THREE.SphereGeometry(0.022, 8, 6));
   const strobe = new THREE.Mesh(strobeGeo, mats.emissive('enemyStrobe', 0xff8a2a, 8));
   strobe.position.set(0.14, 0.30, -0.09);
