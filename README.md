@@ -1,202 +1,88 @@
-# TIDEBREAKER — Berth 7
+# TIDEBREAKER — Berth 7 Fabrication Lockdown
 
-A vertical slice of an original modern-military FPS, built with **Three.js + TypeScript + Vite**.
-Roughly 60–90 seconds of play: push east along a wet container berth at dusk, clear the hostiles,
-reach the pier head.
+Three.js + TypeScript + Viteで作られた、オリジナルの一人称ストーリーFPS縦切りです。
+雨の港湾外周から長い既存工場へ侵入し、3人の生存者と彼らを「保護」していた物理AIの真相に到達します。想定プレイ時間は8〜15分です。
 
-Everything in this repository is original. There are **no binary art assets at all** — every
-texture, every model, every sound is generated procedurally at load time from code in `src/`.
-See [Assets and licences](#assets-and-licences).
+既存港湾、レンダリング、武器感触を維持しつつ、ロボット戦、GATEKEEPER、アクセスモジュール、3区画の工場、人質区画、WARDEN-03三段階戦、真相開示、チェックポイントを追加しています。特定の市販FPS作品の著作物は使用していません。
 
----
-
-## 1. Running it
+## 実行
 
 ```bash
 npm install
-```
-
-```bash
 npm run dev
 ```
 
-Then open <http://localhost:5173>. Click **CLICK TO DEPLOY** to capture the mouse and start.
-
-Other scripts:
+<http://localhost:5173> を開き、`CLICK TO BEGIN INSERTION`を押します。
 
 ```bash
+npm run typecheck
 npm run build
-```
-
-```bash
 npm run preview
 ```
 
-`npm run build` runs `tsc --noEmit` first, so a type error fails the build.
+WebGL 2対応のデスクトップブラウザが必要です。pointer lockが拒否された場合はsoft lockへ移り、ミッション進行は停止しません。
 
-**Requirements:** a browser with WebGL 2 (Chrome, Edge or Firefox, hardware acceleration on).
-Three.js dropped WebGL 1 in r163; if WebGL 2 is missing the game shows an explanatory card
-instead of a blank page.
+## 操作
 
-**Useful URL flags**
-
-| Flag | Effect |
+| 入力 | 操作 |
 | --- | --- |
-| `?quality=low` | Force the Performance preset |
-| `?quality=medium` | Force the Balanced preset |
-| `?quality=high` | Force the Cinematic preset |
-| `?exposure=N` | Override the authored exposure (inspect assets lit rather than as silhouettes) |
-| `?posetest=1` | Freeze the AI and line five hostiles up at 2 / 4 / 8 / 15 / 30 m, cycling idle → walk → run → aim/fire → hit reactions → death |
-| `?posetest=reload` | Same line-up, held in a looping reload so that pose can be inspected close up |
-| `?enemytrace=1` | Mirror every hostile's state and magazine onto `document.body.dataset.enemies` (`i`dle / `a`lert / `f`iring / `r`eloading) |
-| `?boom=N` | Detonate a charge N seconds in, 7 m ahead of the player, repeating. Phase-independent, so it works on the briefing view too |
-| `?boomhold=L` | Pin the blast light at life fraction `L` (0 ignition, 0.08 peak, 1 out) so a specific moment can be captured. Implies a single detonation |
-| `?boomslow=N` | Stretch the blast light's lifetime by N. The decay curve is normalised, so every life fraction looks as it does at speed |
-| `?chaintest=N` | Run the deterministic drum chain-reaction test N times; results land on `document.body.dataset.chain` |
-| `?chainseed=I` | Which drum the chain test lights (default 2, the fuel dump; 0 is the pair at the bay mouth) |
-| `?weaponpose=hip\|ads\|sprint\|retract` | Pin the view-model pose so each extreme can be inspected. `ads` drives the real ADS blend, so FOV and reticle are faithful |
-| `?weapontrace=1` | Mirror the view-model transform, camera FOV/aspect and every animation layer onto `document.body.dataset.weapon` each frame |
-| `?wetdebug=mask\|rough\|reflect` | Visualise the wet-ground fields |
+| WASD | 移動 |
+| Mouse | 視点 |
+| 左クリック | 射撃。照準していなくても自動的にADSし、照準完了後に発射 |
+| 右クリック | ADS |
+| Shift | 前方スプリント |
+| Ctrl / C | しゃがみ |
+| Space | ジャンプ |
+| R | リロード |
+| F | モジュール回収 / 端末操作 / 人質解放 |
+| H | HUD表示切替 |
+| ` | デバッグパネル |
+| P | リスタート |
+| Esc | マウス解放 |
 
-Without a flag the preset is auto-detected from core count and GPU string.
+## ミッション
 
-**Diagnostics without a console.** A scripted browser session runs page JavaScript in an isolated
-world and cannot read module state, so the mission mirrors its state onto `<body>` data attributes:
-`data-phase`, `data-tick`, `data-booms`, `data-blast`, `data-stats`, `data-chain`. These cost one
-DOM write per frame and are how every measurement in
-[QUALITY_REPORT.md](docs/QUALITY_REPORT.md) was taken.
+`BRIEFING → EXTERIOR_COMBAT → GATEKEEPER → ACCESS_MODULE → GATE_OPENING → FACTORY_ENTRY → INTERIOR_APPROACH → HOSTAGES_DISCOVERED → WARDEN-03 PHASE 1/2/3 → TRUTH_REVEAL → HOSTAGE_RELEASE → EXTRACTION → MISSION_COMPLETE`
 
----
+死亡時は `EXTERIOR_ENTRY`、`GATEKEEPER_DEFEATED`、`FACTORY_ENTRY`、`BOSS_INTRO` の最新地点へ復帰します。
 
-## 2. Controls
+## デバッグURL
 
-| Input | Action |
+| URLパラメータ | 用途 |
 | --- | --- |
-| `W` `A` `S` `D` | Move |
-| Mouse | Look |
-| Left mouse | Fire (full auto) |
-| Right mouse | Aim down sight |
-| `Shift` | Sprint (forward only, weapon lowered) |
-| `Ctrl` / `C` | Crouch |
-| `Space` | Jump |
-| `R` | Reload |
-| `F` | Toggle the performance overlay |
-| `H` | Toggle the HUD (for clean screenshots) |
-| `` ` `` | Toggle the debug panel (releases the mouse) |
-| `P` | Restart the mission |
-| `Esc` | Release the mouse |
+| `?mission=BOSS_PHASE_1` | 任意のMissionStateへ世界状態込みで直接遷移 |
+| `?mission=BOSS_PHASE_2` / `BOSS_PHASE_3` | ボスの該当弱点・外装状態を復元 |
+| `?mission=TRUTH_REVEAL` | 真相開示を直接再生 |
+| `?mission=HOSTAGE_RELEASE` | 解放端末直前へ移動 |
+| `?mission=MISSION_COMPLETE` | 結果画面を確認 |
+| `?mission=BOSS_PHASE_1&dead=1` | ボスチェックポイント死亡復帰の検証 |
+| `?god=1` | 無敵 |
+| `?enemytrace=1` | ロボット/GATEKEEPER状態をbody datasetへ出力 |
+| `?weapontrace=1` | ADS・武器姿勢をbody datasetへ出力 |
+| `?skipintro=1` | 導入演出をスキップ |
+| `?boom=N`, `?boomhold=L`, `?chaintest=N` | 爆発/連鎖の決定論的検証 |
+| `?quality=low\|medium\|high` | 品質プリセット固定 |
 
-If the browser refuses pointer lock (sandboxed iframes, some remote setups) the game falls back
-to a "soft lock" that reads raw mouse deltas, so it stays playable. `Esc` releases it.
+常時診断値: `data-mission-state`、`data-checkpoint`、`data-mission-flags`、`data-boss-phase`、`data-stats`。開発ビルドでは `window.tidebreaker.debugJumpTo(state)` も利用できます。
 
----
+## 構成
 
-## 3. Project layout
+- `src/app/Game.ts`: 全システム所有、固定フレーム順、状態と世界の統合
+- `src/mission/`: 唯一のMissionStateMachine、遷移表、チェックポイント
+- `src/enemies/RobotEnemyManager.ts`: SCOUT/SENTINELのAI、命中、リセット
+- `src/bosses/`: GATEKEEPERとWARDEN-03
+- `src/environment/HarborLevel.ts`: 既存港湾と工場シェル
+- `src/environment/FactoryMission.ts`: ゲート、工場3区画、危険設備、人質区画
+- `src/story/TruthReveal.ts`: ボス後の事故記録再生
+- `src/weapons/`: 強制ADS武器と統合Ballistics
+- `src/core/RenderSystem.ts`: 既存のworld/view-model/post-process描画
 
-```
-src/
-  main.ts                  entry point only: DOM lookup, WebGL2 check, hand off to Game
-  app/
-    Game.ts                owns every system, the frame order and teardown
-    MissionDirector.ts     intro sequence, objectives, win/lose
-  core/
-    RenderSystem.ts        the whole render + post pipeline
-    Input.ts               pointer lock (+ soft-lock fallback), edge-tracked keys
-    EventBus.ts            typed pub/sub; the spine that keeps VFX/audio/UI in sync
-    Clock.ts  Pool.ts  MathUtils.ts  Disposal.ts  Rng.ts  Layers.ts
-  config/
-    visual.ts              EVERY look-affecting number
-    gameplay.ts            movement, weapon, enemy, mission tuning
-    quality.ts             the three presets
-    input.ts               key bindings
-  scene/
-    SkyDome.ts             analytic dusk sky; authoritative sun direction
-    Lighting.ts            key light, hemisphere fill, fog, PMREM probe
-  environment/
-    HarborLevel.ts         the authored level: layout, composition, encounter placement
-    LevelBuilder.ts        merges static geometry per (zone, material)
-    GeometryKit.ts         chamfered boxes, corrugated panels, I-beams, catenaries
-    Props.ts               containers, barriers, drums, catwalks, fences, masts…
-    Practicals.ts          floodlights, beacons, strip lights, swinging lamps, flicker
-    WetGround.ts           puddle mask + planar reflection + ripples
-    DistantScenery.ts      sea, skyline, aviation lights, drizzle, distant battle
-    Explosives.ts          shootable fuel drums with fuses and chain reactions
-  player/
-    Player.ts              movement, stance, health
-    PlayerCamera.ts        aim, recoil, shake, bob, FOV, motion vector
-  weapons/
-    RifleModel.ts          the MK-7 "VESPER" geometry
-    WeaponController.ts    pose layers, firing, reload, heat
-    Ballistics.ts          hitscan resolution for player and AI
-  enemies/
-    EnemySoldier.ts        soldier rig
-    EnemyManager.ts        activation, strafing, burst fire, hit reactions, death
-  effects/
-    VfxManager.ts          orchestrates and synchronises everything visual
-    ParticleSystem.ts      two fixed-budget instanced batches
-    DecalSystem.ts         bullet holes and scorch marks
-    ImpactPresets.ts       per-material impact response tables
-  materials/
-    TextureFactory.ts      procedural PBR texture generation
-    ProceduralNoise.ts     tileable value/fbm/worley noise + normal/AO derivation
-    MaterialLibrary.ts     one shared material per surface type
-    FogPatch.ts            global height-fog + aerial perspective shader override
-    WindMaterial.ts        GPU sway for cables and cloth
-  shaders/                 all GLSL, as tagged template strings
-  physics/CollisionWorld.ts grid-accelerated AABB resolve + mesh raycast
-  ui/                      HUD, overlays, stylesheet
-  debug/DebugPanel.ts      lil-gui panel (hidden by default)
-docs/                      design, QA and handover documents
-```
+## 文書
 
-There is no `assets/` directory because there are no asset files.
+- [MISSION_FLOW](docs/MISSION_FLOW.md) / [STATE_MACHINE](docs/STATE_MACHINE.md)
+- [STORY](docs/STORY.md) / [ENEMY_DESIGN](docs/ENEMY_DESIGN.md) / [BOSS_DESIGN](docs/BOSS_DESIGN.md)
+- [RENDERING](docs/RENDERING.md) / [PERFORMANCE](docs/PERFORMANCE.md)
+- [QUALITY_REPORT](docs/QUALITY_REPORT.md) / [MANUAL_TEST_CHECKLIST](docs/MANUAL_TEST_CHECKLIST.md)
+- [HANDOVER](docs/HANDOVER.md) / [KNOWN_ISSUES](docs/KNOWN_ISSUES.md)
 
-### Why no React
-
-The game is a `requestAnimationFrame` loop that mutates a scene graph 60 times a second. React's
-value is declarative reconciliation of a component tree, which is the wrong model for that: every
-frame would either bypass React entirely (making it decorative) or force reconciliation work into
-the frame budget. The HUD is plain DOM, updated with dirty-checked writes from
-[`src/ui/Hud.ts`](src/ui/Hud.ts) — on a steady frame it touches the DOM zero times.
-
----
-
-## 4. Assets and licences
-
-**No third-party art, audio or model assets are used.** Nothing from Call of Duty or any other
-game is present in this repository in any form.
-
-| Item | Source | Licence |
-| --- | --- | --- |
-| three (r0.180) | npm `three` | MIT |
-| lil-gui (0.20) | npm `lil-gui` | MIT |
-| vite, typescript, @types/three | npm | MIT / Apache-2.0 |
-| All textures | generated at runtime by `src/materials/TextureFactory.ts` | original, this repo |
-| All models | generated at runtime by `src/environment/*`, `src/weapons/RifleModel.ts` | original, this repo |
-| All sounds | synthesised at runtime by `src/audio/AudioEngine.ts` | original, this repo |
-| Reticle texture | drawn to a canvas in `RifleModel.ts` | original, this repo |
-| Fonts | CSS system font stack only; nothing bundled | n/a |
-
-No post-processing code was copied from the three.js examples. The bloom, SSAO, FXAA, composite
-and utility passes in `src/shaders/` are written for this project. FXAA implements the
-well-known Lottes algorithm; the code is an original implementation, not a copy.
-
----
-
-## 5. Documents
-
-| Document | Contents |
-| --- | --- |
-| [docs/VISUAL_DESIGN.md](docs/VISUAL_DESIGN.md) | Art direction, lighting model, material system, key parameters |
-| [docs/QUALITY_REPORT.md](docs/QUALITY_REPORT.md) | Honest critique: what works, what does not, what was measured |
-| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measurements, budgets, known costs |
-| [docs/HANDOVER.md](docs/HANDOVER.md) | Architecture and next steps for whoever picks this up |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Defects and limitations |
-
----
-
-## 6. Status
-
-This is a **vertical slice**, not a finished game. It boots, plays end to end, and has no build
-errors or console errors. It is not at shipping AAA fidelity, and
-[docs/QUALITY_REPORT.md](docs/QUALITY_REPORT.md) says exactly where it falls short and why.
+すべてのモデル、テクスチャ、音はコード生成です。依存ライブラリはthree、lil-gui、Vite、TypeScriptで、アート/音声の外部バイナリアセットはありません。

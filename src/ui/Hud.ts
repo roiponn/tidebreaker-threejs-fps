@@ -35,6 +35,10 @@ export class Hud {
   private hitArcPath: SVGPathElement;
   private marker: HTMLDivElement;
   private perf: HTMLDivElement;
+  private interaction: HTMLDivElement;
+  private bossBar: HTMLDivElement;
+  private bossLabel: HTMLDivElement;
+  private bossFill: HTMLElement;
 
   private hitmarkerTimer = 0;
   private hitArcTimer = 0;
@@ -78,6 +82,10 @@ export class Hud {
     this.hitArcPath = this.root.querySelector('.hit-arc path') as SVGPathElement;
     this.marker = this.q('.marker');
     this.perf = this.q('.perf');
+    this.interaction = this.q('.interaction');
+    this.bossBar = this.q('.boss-bar');
+    this.bossLabel = this.q('.boss-bar .label');
+    this.bossFill = this.q('.boss-bar i');
 
     this.q<HTMLDivElement>('.ammo .weapon-name').textContent = WEAPON_CONFIG.name;
 
@@ -129,6 +137,18 @@ export class Hud {
     this.perf.innerHTML = lines;
   }
 
+  setInteraction(text: string | null): void {
+    this.interaction.textContent = text ? `F  ${text}` : '';
+    this.interaction.classList.toggle('show', Boolean(text));
+  }
+
+  setBoss(name: string, phase: number, health01: number, visible: boolean): void {
+    this.bossBar.classList.toggle('show', visible);
+    if (!visible) return;
+    this.bossLabel.textContent = `${name}  //  PHASE ${phase}`;
+    this.bossFill.style.transform = `scaleX(${clamp01(health01).toFixed(3)})`;
+  }
+
   /**
    * Per-frame update. Everything here is dirty-checked; on a steady frame this
    * function touches the DOM zero times.
@@ -148,6 +168,7 @@ export class Hud {
       enemiesRemaining: number;
       enemiesTotal: number;
       cameraYaw: number;
+      counterLabel?: string;
     },
   ): void {
     // --- crosshair: gap follows the actual bullet spread ---
@@ -209,7 +230,7 @@ export class Hud {
     }
 
     // --- objective counter ---
-    const counter = `HOSTILES ${String(state.enemiesRemaining).padStart(2, '0')} / ${String(
+    const counter = state.counterLabel ?? `HOSTILES ${String(state.enemiesRemaining).padStart(2, '0')} / ${String(
       state.enemiesTotal,
     ).padStart(2, '0')}`;
     if (counter !== this.lastCounter) {
@@ -296,6 +317,13 @@ const TEMPLATE = /* html */ `
     <div class="text">ADVANCE TO THE PIER HEAD</div>
     <div class="counter">HOSTILES 00 / 00</div>
   </div>
+
+  <div class="boss-bar">
+    <div class="label">WARDEN-03 // PHASE 1</div>
+    <div class="track"><i></i></div>
+  </div>
+
+  <div class="interaction"></div>
 
   <div class="ammo">
     <div class="weapon-name">MK-7</div>

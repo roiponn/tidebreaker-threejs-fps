@@ -33,8 +33,8 @@ export class Input {
    */
   softLock = false;
 
-  /** Notified whenever pointer lock is gained or lost (drives the pause veil). */
-  onLockChange: ((locked: boolean) => void) | null = null;
+  /** Notified whenever capture mode changes (drives the non-modal retry hint). */
+  onLockChange: ((locked: boolean, mode: 'real' | 'soft' | 'none') => void) | null = null;
 
   constructor(private readonly element: HTMLElement) {
     this.teardowns.push(
@@ -53,7 +53,9 @@ export class Input {
   private softLockTimer = 0;
 
   requestLock(): void {
-    if (this.locked) return;
+    // A soft lock is a fallback, not a terminal state. Clicking the hint must
+    // still be allowed to upgrade it to real pointer lock.
+    if (document.pointerLockElement === this.element) return;
     try {
       // Chrome throws if lock is requested too soon after an exit; swallow it.
       void Promise.resolve(this.element.requestPointerLock()).catch(() => this.enableSoftLock());
@@ -70,7 +72,7 @@ export class Input {
     if (this.locked) return;
     this.softLock = true;
     this.locked = true;
-    this.onLockChange?.(true);
+    this.onLockChange?.(true, 'soft');
   }
 
   exitLock(): void {
@@ -84,7 +86,7 @@ export class Input {
       this.locked = false;
       this.held.clear();
       this.mouseButtons.clear();
-      this.onLockChange?.(false);
+      this.onLockChange?.(false, 'none');
     }
   }
 
@@ -166,7 +168,7 @@ export class Input {
       this.held.clear();
       this.mouseButtons.clear();
     }
-    this.onLockChange?.(this.locked);
+    this.onLockChange?.(this.locked, real ? 'real' : this.softLock ? 'soft' : 'none');
   };
 
   private handleMouseMove = (event: MouseEvent): void => {

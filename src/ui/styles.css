@@ -355,6 +355,61 @@ body {
   transform: rotate(45deg);
 }
 
+.interaction {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 190, 120, 0.42);
+  background: rgba(4, 7, 11, 0.72);
+  color: var(--hud-text);
+  font: 500 11px/1 var(--hud-mono);
+  letter-spacing: 0.15em;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.interaction.show {
+  opacity: 1;
+}
+
+.boss-bar {
+  position: absolute;
+  left: 50%;
+  top: 8vh;
+  width: min(460px, 46vw);
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.boss-bar.show {
+  opacity: 1;
+}
+
+.boss-bar .label {
+  margin-bottom: 7px;
+  color: var(--hud-text);
+  text-align: center;
+  font: 500 10px/1 var(--hud-mono);
+  letter-spacing: 0.22em;
+}
+
+.boss-bar .track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.boss-bar .track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  background: linear-gradient(90deg, #ff6a36, #ffd38a);
+  box-shadow: 0 0 12px rgba(255, 96, 42, 0.5);
+}
+
 /* ---------------------------------------------------------------- */
 /* Full-screen overlays                                              */
 /* ---------------------------------------------------------------- */
@@ -412,6 +467,10 @@ body {
   letter-spacing: 0.06em;
 }
 
+.overlay .body span {
+  display: block;
+}
+
 .overlay .controls {
   margin-top: 26px;
   display: grid;
@@ -460,6 +519,98 @@ body {
 .overlay .stats span:nth-child(even) {
   color: var(--hud-text);
   text-align: right;
+}
+
+.end-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.end-actions button {
+  border: 1px solid rgba(255, 190, 120, 0.45);
+  background: rgba(8, 11, 17, 0.78);
+  color: var(--hud-text);
+  padding: 11px 18px;
+  font: 500 11px/1 var(--hud-mono);
+  letter-spacing: 0.16em;
+  cursor: pointer;
+}
+
+.end-actions button:hover,
+.end-actions button:focus-visible {
+  border-color: var(--hud-accent);
+  color: var(--hud-accent);
+  outline: none;
+}
+
+.truth-reveal {
+  position: absolute;
+  left: 4vw;
+  top: 12vh;
+  width: min(620px, 58vw);
+  padding: 22px 26px;
+  border-left: 2px solid rgba(100, 215, 255, 0.78);
+  background: linear-gradient(90deg, rgba(4, 10, 16, 0.94), rgba(4, 10, 16, 0.55));
+  color: var(--hud-text);
+  font-family: var(--hud-mono);
+  opacity: 0;
+  transform: translateX(-18px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.truth-reveal.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.truth-reveal .eyebrow {
+  color: #7edfff;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+}
+
+.truth-reveal h2 {
+  margin: 8px 0 16px;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  font-weight: 500;
+}
+
+.truth-reveal .log {
+  display: grid;
+  gap: 5px;
+  color: rgba(223, 235, 240, 0.82);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.truth-reveal .log span:last-child {
+  color: #f6c47a;
+}
+
+.truth-reveal .subjects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.truth-reveal .subjects span {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid rgba(126, 223, 255, 0.24);
+  font-size: 9px;
+}
+
+.truth-reveal .subjects b,
+.truth-reveal .subjects i {
+  color: #7edfff;
+  font-style: normal;
+  font-weight: 500;
 }
 
 /* Cinematic bars for the intro. */

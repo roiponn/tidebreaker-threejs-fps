@@ -1,3 +1,6 @@
+import { MISSION_V2 } from '@/config/mission';
+import type { TruthRevealFrame } from '@/story/TruthReveal';
+
 /**
  * Full-screen UI: loading, briefing, intro chatter, end card and the fatal
  * error fallback.
@@ -21,12 +24,14 @@ export class Overlays {
   private letterboxTop: HTMLDivElement;
   private letterboxBottom: HTMLDivElement;
   private fatal: HTMLDivElement;
+  private truth: HTMLDivElement;
 
   /** Set by the game; fired when the player clicks the briefing screen. */
   onStart: (() => void) | null = null;
   /** Fired when the player clicks the pointer-lock prompt. */
   onRecaptureMouse: (() => void) | null = null;
   onRestart: (() => void) | null = null;
+  onTitle: (() => void) | null = null;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -46,10 +51,16 @@ export class Overlays {
     this.letterboxTop = this.q('.letterbox.top');
     this.letterboxBottom = this.q('.letterbox.bottom');
     this.fatal = this.q('.fatal');
+    this.truth = this.q('.truth-reveal');
+
+    this.q<HTMLElement>('.briefing .body').innerHTML = MISSION_V2.lines.briefing
+      .map((line) => `<span>${line}</span>`)
+      .join('');
 
     this.briefing.addEventListener('click', () => this.onStart?.());
     this.mouseHint.addEventListener('click', () => this.onRecaptureMouse?.());
-    this.endCard.addEventListener('click', () => this.onRestart?.());
+    this.q<HTMLButtonElement>('.endcard .retry').addEventListener('click', () => this.onRestart?.());
+    this.q<HTMLButtonElement>('.endcard .title-return').addEventListener('click', () => this.onTitle?.());
   }
 
   private q<T extends HTMLElement>(selector: string): T {
@@ -79,7 +90,7 @@ export class Overlays {
     this.briefing.classList.add('show');
     this.q<HTMLElement>('.briefing h2').textContent = paused
       ? 'PAUSED // CLICK TO RESUME'
-      : 'OPERATION TIDEBREAKER // BERTH 7';
+      : 'OPERATION TIDEBREAKER // FABRICATION LOCKDOWN';
   }
 
   hideBriefing(): void {
@@ -117,12 +128,29 @@ export class Overlays {
     this.chatter.classList.add('show');
   }
 
+  showTruth(frame: TruthRevealFrame): void {
+    this.q<HTMLElement>('.truth-reveal h2').textContent = frame.heading;
+    this.q<HTMLElement>('.truth-reveal .log').innerHTML = frame.lines
+      .map((line) => `<span>${line}</span>`)
+      .join('');
+    this.q<HTMLElement>('.truth-reveal .subjects').innerHTML = frame.subjectStatus
+      .map((subject) => `<span><b>${subject.id}</b>${subject.name}<i>${subject.vitals}</i></span>`)
+      .join('');
+    this.truth.classList.add('show');
+  }
+
+  hideTruth(): void {
+    this.truth.classList.remove('show');
+  }
+
   // --- end card ---
 
   showEnd(success: boolean, stats: Array<[string, string]>): void {
-    this.endTitle.textContent = success ? 'EXTRACTED' : 'K.I.A.';
+    this.endTitle.textContent = success ? 'MISSION COMPLETE' : 'K.I.A.';
     this.endTitle.style.color = success ? '' : '#ff5a44';
-    this.endSubtitle.textContent = success ? 'BERTH 7 // SECURED' : 'BERTH 7 // MISSION FAILED';
+    this.endSubtitle.textContent = success
+      ? '3 SURVIVORS RECOVERED // WARDEN-03 OFFLINE'
+      : 'TIDEBREAKER // MISSION FAILED';
     this.endStats.innerHTML = stats
       .map(([label, value]) => `<span>${label}</span><span>${value}</span>`)
       .join('');
@@ -149,17 +177,13 @@ const TEMPLATE = /* html */ `
   <div class="letterbox top"></div>
   <div class="letterbox bottom"></div>
   <div class="chatter"></div>
-  <div class="mouse-hint"><span>CLICK TO CAPTURE MOUSE</span></div>
+  <div class="mouse-hint"><span>CLICK TO RECAPTURE MOUSE</span></div>
 
   <div class="overlay briefing">
     <h1>TIDEBREAKER</h1>
-    <h2>OPERATION TIDEBREAKER // BERTH 7</h2>
+    <h2>OPERATION TIDEBREAKER // FABRICATION LOCKDOWN</h2>
     <div class="rule"></div>
-    <div class="body">
-      Storm has passed. The yard is still lit and still held.<br>
-      Push east along the berth, clear the hostiles and reach the pier head
-      before the window closes.
-    </div>
+    <div class="body"></div>
     <div class="controls">
       <b>W A S D</b><span>Move</span>
       <b>MOUSE</b><span>Look</span>
@@ -173,15 +197,25 @@ const TEMPLATE = /* html */ `
       <b>&#96;</b><span>Debug panel</span>
       <b>P</b><span>Restart</span>
     </div>
-    <div class="prompt">CLICK TO DEPLOY</div>
+    <div class="prompt">CLICK TO BEGIN INSERTION</div>
+  </div>
+
+  <div class="truth-reveal">
+    <div class="eyebrow">CORE RECORD PLAYBACK</div>
+    <h2>INCIDENT ARCHIVE</h2>
+    <div class="log"></div>
+    <div class="subjects"></div>
   </div>
 
   <div class="overlay endcard">
-    <h1>EXTRACTED</h1>
-    <h2>BERTH 7 // SECURED</h2>
+    <h1>MISSION COMPLETE</h1>
+    <h2>3 SURVIVORS RECOVERED // WARDEN-03 OFFLINE</h2>
     <div class="rule"></div>
     <div class="stats"></div>
-    <div class="prompt">CLICK TO REDEPLOY</div>
+    <div class="end-actions">
+      <button class="retry" type="button">RETRY FROM CHECKPOINT</button>
+      <button class="title-return" type="button">RETURN TO BRIEFING</button>
+    </div>
   </div>
 
   <div class="loader">

@@ -12,6 +12,7 @@ import { Practicals } from './Practicals';
 import { PropKit, type Piece } from './Props';
 import { WetGround } from './WetGround';
 import { DistantScenery } from './DistantScenery';
+import { FACTORY_LAYOUT, FactoryMission } from './FactoryMission';
 
 /**
  * "BERTH 7" - the playable harbour.
@@ -56,6 +57,7 @@ export class HarborLevel {
   readonly practicals: Practicals;
   readonly wetGround: WetGround;
   readonly distant: DistantScenery;
+  readonly factory: FactoryMission;
 
   readonly playerSpawn = new THREE.Vector3(-1.5, 0, 0.5);
   /** forward = (-sin(yaw), 0, -cos(yaw)); -PI/2 looks down +X, toward the pier. */
@@ -96,6 +98,15 @@ export class HarborLevel {
     this.buildCanyon();
     this.buildYard();
     this.buildWarehouse();
+    this.factory = new FactoryMission(mats, collision);
+    this.root.add(this.factory.group);
+    // Three real spill lights keep the new 50m-deep interior readable. The
+    // remaining ceiling bars are emissive-only, preserving the forward-light
+    // budget while these anchor the three combat zones.
+    this.practicals.addStripLight(new THREE.Vector3(29, 5.8, 29.5), 0, 4.2, true);
+    this.practicals.addStripLight(new THREE.Vector3(32, 6.1, 43.5), 0, 4.2, true);
+    this.practicals.addStripLight(new THREE.Vector3(25.5, 5.7, 53), 0, 4.2, true);
+    this.practicals.addStripLight(new THREE.Vector3(17, 3.0, 52), Math.PI / 2, 2.4);
     this.buildQuay();
     this.buildPierHead();
     this.buildOverheadCables();
@@ -511,25 +522,68 @@ export class HarborLevel {
     const cladPale = this.mats.cladding('Pale');
     const cladRust = this.mats.cladding('Rust');
     const steel = this.mats.steelPainted();
-    const x0 = 12;
-    const x1 = 46;
-    const zFace = 12.5;
-    const height = 11.5;
+    const x0 = FACTORY_LAYOUT.xMin;
+    const x1 = FACTORY_LAYOUT.xMax;
+    const zFace = FACTORY_LAYOUT.frontZ;
+    const height = FACTORY_LAYOUT.height;
+    const doorW = FACTORY_LAYOUT.gateWidth;
+    const doorH = FACTORY_LAYOUT.gateHeight;
+    const doorX = FACTORY_LAYOUT.gateX;
+    const doorLeft = doorX - doorW / 2;
+    const doorRight = doorX + doorW / 2;
 
     // Facade built from separate bays so the cladding has visible joints.
+    // Panels that intersect the roller door are split around the opening: the
+    // 5.4 x 5.2m entrance is now geometry, rather than a door painted over a
+    // solid warehouse block.
     const bayWidth = (x1 - x0) / 8;
     for (let i = 0; i < 8; i++) {
-      const cx = x0 + bayWidth * (i + 0.5);
-      const panel = corrugatedPanel(bayWidth - 0.12, height, Math.round(bayWidth * 3.4), 0.045);
-      this.disposables.push(panel);
-      this.builder.place(zone, i % 3 === 1 ? cladRust : cladPale, panel, trs(cx, height / 2, zFace, 0, Math.PI, 0));
+      const bayLeft = x0 + bayWidth * i + 0.06;
+      const bayRight = x0 + bayWidth * (i + 1) - 0.06;
+      const material = i % 3 === 1 ? cladRust : cladPale;
+      const addPanel = (left: number, right: number, bottom: number, top: number): void => {
+        const width = right - left;
+        const panelHeight = top - bottom;
+        if (width < 0.08 || panelHeight < 0.08) return;
+        const panel = corrugatedPanel(width, panelHeight, Math.max(2, Math.round(width * 3.4)), 0.045);
+        this.disposables.push(panel);
+        this.builder.place(
+          zone,
+          material,
+          panel,
+          trs((left + right) / 2, (bottom + top) / 2, zFace, 0, Math.PI, 0),
+        );
+      };
+      if (bayRight <= doorLeft || bayLeft >= doorRight) {
+        addPanel(bayLeft, bayRight, 0, height);
+      } else {
+        addPanel(bayLeft, Math.min(bayRight, doorLeft), 0, height);
+        addPanel(Math.max(bayLeft, doorRight), bayRight, 0, height);
+        addPanel(Math.max(bayLeft, doorLeft), Math.min(bayRight, doorRight), doorH, height);
+      }
       // Vertical joint mullion between bays.
-      const mullion = chamferBox(0.16, height, 0.2, 0.02, 1);
+      const jointX = x0 + bayWidth * i;
+      const mullionHeight = jointX > doorLeft && jointX < doorRight ? height - doorH : height;
+      const mullionY = jointX > doorLeft && jointX < doorRight ? doorH + mullionHeight / 2 : height / 2;
+      const mullion = chamferBox(0.16, mullionHeight, 0.2, 0.02, 1);
       this.disposables.push(mullion);
-      this.builder.place(zone, steel, mullion, trs(x0 + bayWidth * i, height / 2, zFace - 0.06));
+      this.builder.place(zone, steel, mullion, trs(jointX, mullionY, zFace - 0.06));
     }
-    // Structural mass behind the cladding (collision + occlusion).
-    this.slab(zone, x1 - x0, height, 13, (x0 + x1) / 2, height / 2, zFace + 6.6, this.mats.concreteWall());
+
+    // A real shell replaces the old single solid occlusion block. The floor,
+    // roof, side and rear walls bound a 50m-deep playable interior. Three thin
+    // facade slabs preserve collision/occlusion while leaving the gate clear.
+    const rearZ = FACTORY_LAYOUT.rearZ;
+    const depth = rearZ - zFace;
+    const wallThickness = 0.45;
+    this.slab(zone, x1 - x0, 0.3, depth, (x0 + x1) / 2, -0.15, (zFace + rearZ) / 2, this.mats.concrete());
+    this.slab(zone, x1 - x0, 0.35, depth, (x0 + x1) / 2, height - 0.175, (zFace + rearZ) / 2);
+    this.slab(zone, wallThickness, height, depth, x0, height / 2, (zFace + rearZ) / 2);
+    this.slab(zone, wallThickness, height, depth, x1, height / 2, (zFace + rearZ) / 2);
+    this.slab(zone, x1 - x0, height, wallThickness, (x0 + x1) / 2, height / 2, rearZ);
+    this.slab(zone, doorLeft - x0, height, wallThickness, (x0 + doorLeft) / 2, height / 2, zFace + 0.22);
+    this.slab(zone, x1 - doorRight, height, wallThickness, (doorRight + x1) / 2, height / 2, zFace + 0.22);
+    this.slab(zone, doorW, height - doorH, wallThickness, doorX, doorH + (height - doorH) / 2, zFace + 0.22);
     // Parapet and roof edge.
     const parapet = chamferBox(x1 - x0, 0.9, 0.5, 0.03, 1);
     this.disposables.push(parapet);
@@ -542,15 +596,9 @@ export class HarborLevel {
     this.prop(zone, this.kit.ventUnit(2.6, 1.8, 1.3), trs(38, height + 0.9, 16.0, 0, 0.1, 0));
     this.slab(zone, 3.2, 2.6, 3, 43.5, height + 1.3, 16.5, this.mats.concreteWall(), false);
 
-    // Roller door, open, spilling warm light into the yard: the strongest
-    // "somewhere to look" cue on the north side.
-    const doorW = 5.4;
-    const doorH = 5.2;
-    const doorX = 33.4;
+    // Door frame remains part of the batched shell. FactoryMission owns the
+    // moving full-height shutter and its dynamically enabled collision.
     this.slab(zone, doorW + 1.0, 0.7, 0.6, doorX, doorH + 0.35, zFace - 0.05, this.mats.concreteWall(), false);
-    const shutter = corrugatedPanel(doorW, 1.1, 18, 0.03);
-    this.disposables.push(shutter);
-    this.builder.place(zone, cladRust, shutter, trs(doorX, doorH - 0.55, zFace - 0.12, 0, Math.PI, 0));
     for (const sx of [-1, 1]) {
       const jamb = chamferBox(0.22, doorH, 0.4, 0.02, 1);
       this.disposables.push(jamb);
@@ -558,9 +606,7 @@ export class HarborLevel {
         collide: true,
       });
     }
-    // Interior box behind the door so the opening is not a black void.
-    this.slab(zone, doorW + 3, 6.4, 0.4, doorX, 3.2, zFace + 7.4, this.mats.concreteWall(), false);
-    // The open roller door is the one strip that must spill onto the yard.
+    // Warm entry lights bridge the exterior into the playable loading zone.
     this.practicals.addStripLight(new THREE.Vector3(doorX - 1.2, 4.6, zFace + 3.2), 0, 3, true);
     this.practicals.addStripLight(new THREE.Vector3(doorX + 1.4, 4.6, zFace + 5.6), 0, 3);
     this.practicals.addHangingLamp(new THREE.Vector3(doorX, 5.0, zFace + 1.6), 0.9, 0xffcf9a);
@@ -584,19 +630,20 @@ export class HarborLevel {
     }
 
     // Facade pipework and conduit - the detail that removes the "flat wall" read.
-    this.prop(
-      zone,
-      this.kit.pipeRun(
-        [
-          new THREE.Vector3(13, 3.4, zFace - 0.45),
-          new THREE.Vector3(24, 3.5, zFace - 0.5),
-          new THREE.Vector3(31, 3.4, zFace - 0.45),
-          new THREE.Vector3(45, 3.6, zFace - 0.5),
-        ],
-        [0.11, 0.07, 0.05],
-      ),
-      trs(0, 0, 0),
-    );
+    for (const run of [
+      [
+        new THREE.Vector3(13, 3.4, zFace - 0.45),
+        new THREE.Vector3(24, 3.5, zFace - 0.5),
+        new THREE.Vector3(30.25, 3.4, zFace - 0.45),
+      ],
+      [
+        new THREE.Vector3(36.55, 3.45, zFace - 0.45),
+        new THREE.Vector3(41, 3.55, zFace - 0.48),
+        new THREE.Vector3(45, 3.6, zFace - 0.5),
+      ],
+    ]) {
+      this.prop(zone, this.kit.pipeRun(run, [0.11, 0.07, 0.05]), trs(0, 0, 0));
+    }
     for (const bx of [15, 22, 29, 41]) {
       const bracket = chamferBox(0.1, 0.1, 0.5, 0.012, 1);
       this.disposables.push(bracket);
@@ -947,12 +994,14 @@ export class HarborLevel {
     this.practicals.update(dt, elapsed);
     this.wetGround.update(elapsed);
     this.distant.update(dt, elapsed, cameraPosition);
+    this.factory.update(dt, elapsed);
   }
 
   dispose(): void {
     for (const item of this.disposables) item.dispose();
     this.disposables.length = 0;
     this.kit.dispose();
+    this.factory.dispose();
     this.practicals.dispose();
     this.wetGround.dispose();
     this.distant.dispose();

@@ -384,7 +384,7 @@ export class Warden03Controller {
   /** Always CAST.boss. Never hardcode the name - an editor may rename it. */
   readonly name: string = CAST.boss;
 
-  private readonly rig: WardenRig;
+  private rig: WardenRig;
   private readonly rng: Rng;
 
   private state: WardenState = 'dormant';
@@ -404,8 +404,8 @@ export class Warden03Controller {
   // --- damage state ---
   private readonly relayHealth: number[] = [];
   private relaysDown = 0;
-  private coolantHealth = MISSION_V2.boss.phase2CoolantHealth;
-  private coreHealth = MISSION_V2.boss.phase3CoreHealth;
+  private coolantHealth: number = MISSION_V2.boss.phase2CoolantHealth;
+  private coreHealth: number = MISSION_V2.boss.phase3CoreHealth;
   private coolantStage = -1;
   private coreDestroyed = false;
   private staggerMeter = 0;
@@ -588,6 +588,85 @@ export class Warden03Controller {
     this.stateTimer = 0;
     this.phaseIndex = 1;
     this.bus.emit('boss:spawned', { name: this.name, position: position.clone() });
+  }
+
+  /**
+   * Restores the complete pre-fight machine, including destructible geometry.
+   * Checkpoint retry cannot merely set phase=1: phase 3 physically reparents
+   * armour plates into the world and all three weak-point health pools mutate.
+   */
+  reset(): void {
+    for (const piece of this.shedPieces) piece.object.removeFromParent();
+    this.shedPieces.length = 0;
+    this.rig.root.removeFromParent();
+    this.rig.dispose();
+    this.rig = buildWarden03(this.mats);
+    this.group.add(this.rig.root);
+
+    this.state = 'dormant';
+    this.stateTimer = 0;
+    this.phaseIndex = 1;
+    this.position.set(0, 0, 0);
+    this.prevPosition.set(0, 0, 0);
+    this.facing = 0;
+    this.torsoYaw = 0;
+    this.headYaw = 0;
+    this.headPitch = 0;
+    this.walkPhase = 0;
+    this.groundSpeed = 0;
+    this.lastFootSign = 1;
+
+    this.relayHealth.length = 0;
+    for (let i = 0; i < Math.min(MISSION_V2.boss.phase1Relays, this.rig.relays.length); i++) {
+      this.relayHealth.push(RELAY_HEALTH);
+    }
+    this.relaysDown = 0;
+    this.coolantHealth = MISSION_V2.boss.phase2CoolantHealth;
+    this.coreHealth = MISSION_V2.boss.phase3CoreHealth;
+    this.coolantStage = -1;
+    this.coreDestroyed = false;
+    this.staggerMeter = 0;
+    this.relayFlash = this.relayHealth.map(() => 0);
+    this.coolantFlash = 0;
+    this.coreFlash = 0;
+
+    this.attack = null;
+    this.attackTime = 0;
+    this.attackFired = false;
+    this.cooldowns.clear();
+    this.attackGap = 2;
+    this.suppressantActive = false;
+    this.purgeTimer = PURGE_INTERVAL * 0.45;
+    this.purgeActive = false;
+    this.heat = 0;
+    this.shockTime = -1;
+    this.shockRadius = 0;
+    this.shockRing.visible = false;
+    this.foamCone.visible = false;
+    this.emberEmitter.clear();
+    this.steamEmitter.clear();
+    this.group.visible = false;
+    this.applyPhaseVisuals(1, 0);
+  }
+
+  /** Debug-only phase restore used by direct mission-state jumps. */
+  debugSetPhase(phase: 1 | 2 | 3): void {
+    if (!this.group.visible) return;
+    this.relayHealth.fill(phase === 1 ? RELAY_HEALTH : 0);
+    this.relaysDown = phase === 1 ? 0 : this.relayHealth.length;
+    for (let i = 0; i < this.rig.relays.length; i++) {
+      this.rig.relays[i].lampMaterial.emissiveIntensity = phase === 1 ? 5 : 0;
+    }
+    this.coolantHealth = phase <= 2 ? MISSION_V2.boss.phase2CoolantHealth : 0;
+    this.coreHealth = MISSION_V2.boss.phase3CoreHealth;
+    this.coreDestroyed = false;
+    if (phase === 3 && this.shedPieces.length === 0) this.shedArmour();
+    this.phaseIndex = phase;
+    this.state = 'fight';
+    this.stateTimer = 0;
+    this.attack = null;
+    this.attackGap = 2;
+    this.applyPhaseVisuals(phase, 0);
   }
 
   /**
@@ -814,10 +893,13 @@ export class Warden03Controller {
     const desiredFacing = Math.atan2(toPlayer.x, toPlayer.z);
 
     if (this.attack) {
+      // updateAttackLogic may complete the attack and clear this.attack. Keep
+      // the committed definition for the turn-rate calculation in this frame.
+      const committedAttack = this.attack;
       this.updateAttackLogic(dt, playerEye, range, toPlayer);
       // A committed attack turns only slowly. That commitment IS the dodge
       // window: a boss that tracks through its own wind-up cannot be sidestepped.
-      const turnRate = this.attack.kind === 'charge' && this.attackTime < this.attack.windup ? 2.2 : 0.7;
+      const turnRate = committedAttack.kind === 'charge' && this.attackTime < committedAttack.windup ? 2.2 : 0.7;
       this.facing = dampAngle(this.facing, desiredFacing, turnRate, dt);
       return;
     }
@@ -1140,6 +1222,7 @@ export class Warden03Controller {
           position: this.tmpA.copy(this.position).setY(this.position.y + 0.15).clone(),
           radius: 3.0,
           power: 0.35,
+          damagesPlayer: false,
         });
         this.bus.emit('camera:shake', { amplitude: 0.3, duration: 0.6, frequency: 13 });
         this.emitDust(this.position, 30);
@@ -1249,7 +1332,7 @@ export class Warden03Controller {
     this.emitSparks(this.tmpA, 40, 1.0, 0.7, 0.35);
     this.emitSteam(this.tmpA, 40, 2.4);
     this.bus.emit('boss:coolantDown');
-    this.bus.emit('explosion', { position: this.tmpA.clone(), radius: 2.2, power: 0.4 });
+    this.bus.emit('explosion', { position: this.tmpA.clone(), radius: 2.2, power: 0.4, damagesPlayer: false });
     this.beginTransition(3);
   }
 
@@ -1262,7 +1345,7 @@ export class Warden03Controller {
     this.rig.core.anchor.getWorldPosition(this.tmpA);
     this.bus.emit('boss:coreDown');
     this.bus.emit('boss:defeated', { name: this.name });
-    this.bus.emit('explosion', { position: this.tmpA.clone(), radius: 3.4, power: 0.55 });
+    this.bus.emit('explosion', { position: this.tmpA.clone(), radius: 3.4, power: 0.55, damagesPlayer: false });
     this.bus.emit('camera:shake', { amplitude: 0.34, duration: 1.1, frequency: 12 });
     if (this.suppressantActive) {
       this.suppressantActive = false;

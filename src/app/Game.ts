@@ -21,12 +21,14 @@ import { Lighting } from '@/scene/Lighting';
 import { HarborLevel } from '@/environment/HarborLevel';
 import { Explosives } from '@/environment/Explosives';
 import { CollisionWorld } from '@/physics/CollisionWorld';
+import { GatekeeperController } from '@/bosses/GatekeeperController';
+import { Warden03Controller } from '@/bosses/Warden03Controller';
 
 import { PlayerCamera } from '@/player/PlayerCamera';
 import { Player } from '@/player/Player';
 import { WeaponController } from '@/weapons/WeaponController';
 import { Ballistics } from '@/weapons/Ballistics';
-import { EnemyManager } from '@/enemies/EnemyManager';
+import { RobotEnemyManager, type RobotSpawn } from '@/enemies/RobotEnemyManager';
 import { ChainTest } from '@/debug/ChainTest';
 import { VfxManager } from '@/effects/VfxManager';
 import { AudioEngine } from '@/audio/AudioEngine';
@@ -35,6 +37,14 @@ import { Hud } from '@/ui/Hud';
 import { Overlays } from '@/ui/Overlays';
 import { DebugPanel, type DebugState } from '@/debug/DebugPanel';
 import { MissionDirector, formatTime } from './MissionDirector';
+import { TruthReveal } from '@/story/TruthReveal';
+import {
+  CHECKPOINT_OF,
+  MISSION_ORDER,
+  type Checkpoint,
+  type MissionState,
+} from '@/mission/MissionState';
+import { CAST } from '@/config/mission';
 
 /**
  * The game. Owns every system, owns the frame, owns teardown.
@@ -76,7 +86,9 @@ export class Game {
   private view!: PlayerCamera;
   private player!: Player;
   private weapon!: WeaponController;
-  private enemies!: EnemyManager;
+  private enemies!: RobotEnemyManager;
+  private gatekeeper!: GatekeeperController;
+  private warden!: Warden03Controller;
   private ballistics!: Ballistics;
   private vfx!: VfxManager;
   private audio = new AudioEngine();
@@ -85,6 +97,10 @@ export class Game {
   private overlays!: Overlays;
   private debugPanel!: DebugPanel;
   private director!: MissionDirector;
+  private readonly truthReveal = new TruthReveal();
+  private accessModule: THREE.Object3D | null = null;
+  private retries = 0;
+  private hazardDamageCooldown = 0;
 
   private running = false;
   private rafHandle = 0;
@@ -187,10 +203,26 @@ export class Game {
         this.scene.add(this.view.camera, this.view.weaponCamera);
 
         this.player = new Player(this.collision, this.view, this.bus);
-        this.enemies = new EnemyManager(this.materials, this.collision, this.bus);
+        this.enemies = new RobotEnemyManager(this.materials, this.collision, this.bus);
         this.disposer.track(this.enemies);
         this.scene.add(this.enemies.group);
-        this.enemies.spawnAll(this.level.enemySpawns);
+        this.enemies.spawnAll(this.buildRobotSpawns());
+
+        this.gatekeeper = new GatekeeperController(this.materials, this.bus, this.collision);
+        this.gatekeeper.spawn(this.level.factory.gatekeeperSpawn);
+        this.gatekeeper.group.visible = false;
+        this.scene.add(this.gatekeeper.group);
+        this.disposer.onDispose(() => this.gatekeeper.dispose());
+
+        this.warden = new Warden03Controller(this.materials, this.bus, {
+          protectedVolume: this.level.factory.protectedVolume,
+          arena: {
+            center: this.level.factory.objectivePoints.bossArena.clone(),
+            radius: this.level.factory.bossArenaRadius,
+          },
+        });
+        this.scene.add(this.warden.group);
+        this.disposer.onDispose(() => this.warden.dispose());
 
         this.explosives = new Explosives(this.materials, this.bus, this.visual, this.collision);
         this.disposer.track(this.explosives);
@@ -207,13 +239,26 @@ export class Game {
         this.weapon = new WeaponController(this.materials, this.view, this.collision, this.bus, this.visual);
         this.disposer.track(this.weapon);
 
-        this.ballistics = new Ballistics(this.collision, this.enemies, this.vfx, this.bus, this.player);
+        this.ballistics = new Ballistics(
+          this.collision,
+          this.enemies,
+          this.vfx,
+          this.bus,
+          this.player,
+          this.gatekeeper,
+          this.warden,
+        );
       });
 
       await this.stage(0.97, 'ESTABLISHING LINK', () => {
         this.hud = new Hud(this.uiRoot, this.bus);
         this.disposer.track(this.hud);
         this.director = new MissionDirector(this.bus);
+        this.truthReveal.onFrame = (frame) => {
+          if (frame) this.overlays.showTruth(frame);
+          else this.overlays.hideTruth();
+        };
+        this.truthReveal.onLine = (speaker, text) => this.overlays.setChatter(speaker, text);
         this.debugPanel = new DebugPanel(this.visual, this.debugState, this.buildDebugHooks());
         this.disposer.track(this.debugPanel);
 
@@ -225,6 +270,7 @@ export class Game {
 
       this.player.spawn(this.level.playerSpawn, this.level.playerSpawnYaw);
       const params = new URLSearchParams(window.location.search);
+      this.player.invincible = params.has('god');
       // ?posetest=1 lines hostiles up at fixed distances with the AI frozen,
       // so joint quality can be inspected repeatably.
       if (params.has('posetest')) {
@@ -232,7 +278,6 @@ export class Game {
           true,
           this.level.playerSpawn,
           this.level.playerSpawnYaw,
-          params.get('posetest') ?? '',
         );
       }
       // ?exposure=N overrides the authored exposure. The debug panel has the
@@ -302,6 +347,14 @@ export class Game {
       this.overlays.hideLoader();
       this.overlays.showBriefing(false);
       this.start();
+      const requestedState = params.get('mission') as MissionState | null;
+      if (requestedState && MISSION_ORDER.includes(requestedState)) {
+        this.debugJumpTo(requestedState);
+      }
+      if (params.has('dead')) {
+        this.tmpVec.copy(this.player.position).add(new THREE.Vector3(1, 0, 0));
+        this.player.damage(999, this.tmpVec);
+      }
     } catch (error) {
       const message = error instanceof Error ? `${error.message}\n\n${error.stack ?? ''}` : String(error);
       console.error('[Game] boot failed', error);
@@ -317,6 +370,24 @@ export class Game {
     // Two rAFs guarantee the loader has actually painted before we block.
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     work();
+  }
+
+  private buildRobotSpawns(): RobotSpawn[] {
+    const exterior: RobotSpawn[] = this.level.enemySpawns.map((spawn, index) => ({
+      kind: spawn.elevated || index % 3 === 0 ? 'SCOUT' : 'SENTINEL',
+      zone: 'exterior',
+      position: spawn.position.clone(),
+      patrolTo: spawn.patrolTo.clone(),
+      activationX: spawn.activationX,
+    }));
+    const interior: RobotSpawn[] = this.level.factory.robotSpawns.map((spawn) => ({
+      kind: spawn.type === 'scout' ? 'SCOUT' : 'SENTINEL',
+      zone: 'interior',
+      position: spawn.position.clone(),
+      patrolTo: spawn.patrolTo.clone(),
+      activationX: spawn.activationZ,
+    }));
+    return [...exterior, ...interior];
   }
 
   // ------------------------------------------------------------------
@@ -339,14 +410,14 @@ export class Game {
     // permission the player never sees. The two concerns are now separate:
     // clicking the briefing starts the mission, and pointer lock is requested
     // alongside it as a comfort feature that can fail without consequence.
-    this.input.onLockChange = (locked) => {
-      if (locked) {
+    this.input.onLockChange = (locked, mode) => {
+      if (locked && mode === 'real') {
         this.overlays.hideMouseHint();
         return;
       }
       // Lost lock mid-mission: offer it back without throwing the player out
       // of the run. The mission keeps its state; only the look input pauses.
-      if (this.director.phase === 'active' || this.director.phase === 'intro') {
+      if (this.director.inputPermissions.look) {
         this.overlays.showMouseHint();
       }
     };
@@ -363,12 +434,65 @@ export class Game {
     };
     this.overlays.onRestart = () => {
       this.overlays.hideEnd();
-      this.restart();
+      if (this.director.restartAtCheckpoint()) {
+        // Restore before the next frame can mirror stale world flags back into
+        // the freshly restored checkpoint context.
+        this.restoreCheckpointWorld(this.director.checkpoint);
+      } else {
+        this.restartFromBriefing(false);
+      }
       this.input.requestLock();
+    };
+    this.overlays.onTitle = () => {
+      this.overlays.hideEnd();
+      this.input.exitLock();
+      this.restartFromBriefing(true);
+      this.overlays.showBriefing(false);
     };
 
     this.director.onChatter = (speaker, text) => this.overlays.setChatter(speaker, text);
     this.director.onLetterbox = (show) => this.overlays.setLetterbox(show);
+    this.director.onStateChange = (state, previous) => this.onMissionStateChanged(state, previous);
+    this.disposer.onDispose(
+      this.bus.on('mission:radio', ({ speaker, text }) => this.overlays.setChatter(speaker, text)),
+    );
+
+    this.disposer.onDispose(this.bus.on('mission:gatekeeperSpawn', () => {
+      this.gatekeeper.reset();
+      this.gatekeeper.group.visible = true;
+    }));
+    this.disposer.onDispose(this.bus.on('gatekeeper:defeated', () => {
+      this.director.setFlag('gatekeeperAlive', false);
+      this.director.setFlag('gatekeeperDefeated', true);
+    }));
+    this.disposer.onDispose(this.bus.on('gatekeeper:moduleDropped', ({ object }) => {
+      this.accessModule = object;
+    }));
+    this.disposer.onDispose(this.bus.on('mission:gateOpen', () => this.level.factory.openGate()));
+    this.disposer.onDispose(this.bus.on('mission:bossSpawn', () => {
+      this.warden.reset();
+      this.warden.spawn(this.level.factory.bossSpawn);
+    }));
+    this.disposer.onDispose(this.bus.on('boss:relayDown', ({ remaining }) => {
+      this.director.setFlag('bossRelaysDown', 2 - remaining);
+    }));
+    this.disposer.onDispose(this.bus.on('boss:coolantDown', () => {
+      this.director.setFlag('bossCoolantDown', true);
+    }));
+    this.disposer.onDispose(this.bus.on('boss:coreDown', () => {
+      this.director.setFlag('bossCoreDown', true);
+    }));
+    this.disposer.onDispose(this.bus.on('boss:defeated', () => {
+      this.level.factory.setBossDefeated(true);
+    }));
+    this.disposer.onDispose(this.bus.on('boss:playerHit', ({ amount, fromDirection }) => {
+      this.tmpVec2.copy(this.player.position).add(fromDirection);
+      this.player.damage(amount, this.tmpVec2);
+    }));
+    this.disposer.onDispose(this.bus.on('camera:shake', ({ amplitude, frequency }) => {
+      this.view.addShake(amplitude, frequency ?? 12);
+    }));
+    this.disposer.onDispose(this.bus.on('mission:truthReveal', () => this.truthReveal.start()));
 
     // --- VFX <-> world reactions ---
     this.vfx.onGroundRipple = (x, z, strength) => this.level.wetGround.addRipple(x, z, strength);
@@ -425,11 +549,13 @@ export class Game {
       }),
     );
     this.disposer.onDispose(
-      this.bus.on('explosion', ({ position, radius, power }) => {
+      this.bus.on('explosion', ({ position, radius, power, damagesPlayer }) => {
         if (this.chainTest) this.chainTest.explosionsSeen++;
         this.audio.playExplosion(position, power);
         // Blast damage to the player, plus a hard screen kick.
-        const damage = this.explosives.getBlastDamage(position, this.player.position);
+        const damage = damagesPlayer === false
+          ? 0
+          : this.explosives.getBlastDamage(position, this.player.position);
         if (damage > 0) {
           // player.damage() emits player:damaged, which already pulses the
           // screen in proportion to the hit. Adding a second fixed pulse here
@@ -468,7 +594,7 @@ export class Game {
       setParticleScale: (scale: number): void => {
         this.particleScale = scale;
       },
-      respawn: (): void => this.restart(),
+      respawn: (): void => this.restartFromBriefing(false),
     };
   }
 
@@ -495,17 +621,121 @@ export class Game {
     this.audio.setAmbienceLevel(0.5);
   }
 
-  private restart(): void {
-    this.player.spawn(this.level.playerSpawn, this.level.playerSpawnYaw);
+  private restartFromBriefing(returnToBriefing: boolean): void {
+    this.director.reset();
+    this.restoreCheckpointWorld('EXTERIOR_ENTRY');
+    this.retries = 0;
+    if (returnToBriefing) return;
+    this.beginMission();
+  }
+
+  private restoreCheckpointWorld(checkpoint: Checkpoint): void {
     this.enemies.reset();
+    this.gatekeeper.reset();
+    this.gatekeeper.group.visible = false;
+    this.warden.reset();
+    this.level.factory.reset();
     this.explosives.reset();
     this.vfx.clear();
+    this.truthReveal.reset();
+    this.overlays.hideTruth();
     this.weapon.resupply();
     this.ballistics.reset();
-    this.director.reset();
+    this.accessModule = null;
+    this.hazardDamageCooldown = 0;
     this.engagementOpen = false;
     this.engagementGrace = 0;
-    this.beginMission();
+
+    if (checkpoint === 'EXTERIOR_ENTRY') {
+      this.player.spawn(this.level.playerSpawn, this.level.playerSpawnYaw);
+      return;
+    }
+
+    this.enemies.clearZone('exterior');
+    this.director.setFlag('moduleAcquired', true);
+    this.level.factory.setAccessModuleAcquired(true);
+    if (checkpoint === 'GATEKEEPER_DEFEATED') {
+      this.player.spawn(new THREE.Vector3(44, 0, 7.5), 2.4);
+      return;
+    }
+
+    this.level.factory.openGate();
+    if (checkpoint === 'FACTORY_ENTRY') {
+      this.player.spawn(new THREE.Vector3(33.4, 0, 16), Math.PI);
+      return;
+    }
+
+    this.enemies.clearZone('interior');
+    this.level.factory.setBossDefeated(false);
+    this.player.spawn(new THREE.Vector3(31, 0, 39), Math.PI);
+  }
+
+  /** Dev console / ?mission=STATE entry that restores matching world state. */
+  debugJumpTo(state: MissionState): void {
+    const stateIndex = MISSION_ORDER.indexOf(state);
+    const atOrPast = (milestone: MissionState): boolean =>
+      stateIndex >= MISSION_ORDER.indexOf(milestone);
+
+    this.director.reset();
+    this.restoreCheckpointWorld(CHECKPOINT_OF[state]);
+    this.overlays.hideBriefing();
+    this.overlays.hideEnd();
+    this.director.begin();
+    this.director.finishIntro();
+    this.engagementOpen = true;
+
+    if (atOrPast('GATEKEEPER_INTRO')) {
+      this.enemies.clearZone('exterior');
+      this.director.setFlag('exteriorHostilesRemaining', 0);
+    }
+    if (state === 'GATEKEEPER_INTRO' || state === 'GATEKEEPER_ACTIVE') {
+      this.gatekeeper.reset();
+      this.gatekeeper.group.visible = true;
+      this.player.spawn(new THREE.Vector3(39, 0, -2), -Math.PI / 2);
+      this.director.setFlag('gatekeeperAlive', true);
+      this.director.setFlag('gatekeeperDefeated', false);
+    } else if (atOrPast('GATEKEEPER_DEFEATED')) {
+      this.gatekeeper.group.visible = false;
+      this.director.setFlag('gatekeeperAlive', false);
+      this.director.setFlag('gatekeeperDefeated', true);
+    }
+    if (atOrPast('ACCESS_MODULE_ACQUIRED')) {
+      this.director.setFlag('moduleAcquired', true);
+      this.level.factory.setAccessModuleAcquired(true);
+    }
+    if (atOrPast('GATE_OPENING')) {
+      this.director.setFlag('gateOpen', true);
+      this.level.factory.openGate();
+    }
+    if (atOrPast('FACTORY_ENTRY')) this.director.setFlag('insideFactory', true);
+    if (atOrPast('HOSTAGES_DISCOVERED')) this.director.setFlag('hostagesSeen', true);
+    if (atOrPast('BOSS_INTRO')) {
+      this.director.setFlag('reachedControlRoom', true);
+      this.enemies.clearZone('interior');
+    }
+
+    if (state === 'BOSS_INTRO' || state === 'BOSS_PHASE_1' || state === 'BOSS_PHASE_2' || state === 'BOSS_PHASE_3') {
+      this.warden.reset();
+      this.warden.spawn(this.level.factory.bossSpawn);
+      const phase = state === 'BOSS_PHASE_2' ? 2 : state === 'BOSS_PHASE_3' ? 3 : 1;
+      this.warden.debugSetPhase(phase);
+      if (phase >= 2) this.director.setFlag('bossRelaysDown', 2);
+      if (phase >= 3) this.director.setFlag('bossCoolantDown', true);
+    }
+    if (atOrPast('BOSS_DEFEATED')) {
+      this.warden.group.visible = false;
+      this.director.setFlag('bossRelaysDown', 2);
+      this.director.setFlag('bossCoolantDown', true);
+      this.director.setFlag('bossCoreDown', true);
+      this.level.factory.setBossDefeated(true);
+    }
+    if (atOrPast('EXTRACTION')) {
+      this.level.factory.releaseHostages();
+      this.director.setFlag('hostagesReleased', true);
+    }
+
+    this.director.debugForceState(state);
+    this.input.requestLock();
   }
 
   start(): void {
@@ -565,20 +795,25 @@ export class Game {
     if (this.started) this.handleHotkeys();
     const lookX = this.input?.mouseDeltaX ?? 0;
     const lookY = this.input?.mouseDeltaY ?? 0;
-    const playable = this.director.isPlayable && this.input?.locked;
+    const permissions = this.director.inputPermissions;
+    const lookAllowed = permissions.look && Boolean(this.input?.locked);
+    const moveAllowed = permissions.move;
+    const fireAllowed = permissions.fire;
 
     // --- 2. mission ---
     // Only the intro phase drives the camera; every other phase uses the
     // player's own eye transform untouched.
     const introBlend = this.director.phase === 'intro' ? this.director.introBlend : 0;
     if (introBlend > 0) this.director.getIntroOffset(this.introOffset);
-    if (playable) {
+    if (lookAllowed) {
       this.view.applyLook(lookX, lookY, this.weapon.adsBlend);
     }
 
     // --- 3. player + camera ---
-    const wantsAds = playable ? this.input.aiming : false;
-    this.player.setFrozen(!playable);
+    const wantsAds = fireAllowed
+      ? this.input.aiming || this.input.firing || this.weapon.forcingAds
+      : false;
+    this.player.setFrozen(!moveAllowed);
     this.player.update(dt, this.input, wantsAds && this.weapon.state !== 'reloading');
 
     const eye = this.tmpVec.copy(this.player.eye);
@@ -606,7 +841,7 @@ export class Game {
     );
 
     // --- 4. weapon (after the camera: the view-model is parented to it) ---
-    if (playable) {
+    if (fireAllowed) {
       this.weapon.setTrigger(this.input.firing, this.input.firePressed);
       if (this.input.wasPressed('reload')) this.weapon.requestReload();
     } else {
@@ -630,18 +865,34 @@ export class Game {
     }
 
     // --- 5. enemies ---
-    if (!this.engagementOpen && this.director.phase === 'active') {
+    if (!this.engagementOpen && this.director.combatActive) {
       this.engagementGrace += dt;
       const acting =
         this.player.speed > 0.4 || this.input.firing || this.input.aiming || !this.player.grounded;
       if (acting || this.engagementGrace > 4) this.engagementOpen = true;
     }
-    this.enemies.update(dt, elapsed, this.player.eye, this.player.alive, this.engagementOpen);
+    const combatEngaged = this.director.combatActive && this.engagementOpen;
+    this.enemies.update(dt, elapsed, this.player.eye, this.player.alive, combatEngaged);
+    this.gatekeeper.update(
+      dt,
+      elapsed,
+      this.player.eye,
+      this.director.state === 'GATEKEEPER_ACTIVE',
+    );
+    this.warden.update(
+      dt,
+      elapsed,
+      this.player.eye,
+      this.director.state === 'BOSS_PHASE_1' ||
+        this.director.state === 'BOSS_PHASE_2' ||
+        this.director.state === 'BOSS_PHASE_3',
+    );
 
     // --- 6. world ---
     this.explosives.update(dt, elapsed);
     updateWind(elapsed, dt);
     this.level.update(dt, elapsed, this.view.camera.position);
+    this.updateFactoryHazards(dt);
     this.lighting.update(this.view.camera.position, this.view.camera.quaternion);
     this.sky.update(elapsed, this.view.camera.position);
     const flash = this.level.distant.battleFlash;
@@ -661,12 +912,18 @@ export class Game {
     this.audio.setListener(this.view.camera.position, this.view.camera.quaternion);
 
     // --- 9. mission state + HUD ---
-    const extractionDistance = this.player.position.distanceTo(this.level.extractionPoint);
-    const previousPhase = this.director.phase;
-    this.director.update(dt, this.player.position.x, this.enemies.aliveCount, extractionDistance, this.player.alive);
-    if (previousPhase === 'active' && this.director.phase !== 'active') {
-      this.onMissionEnded(this.director.phase === 'complete');
-    }
+    this.updateMissionFlags();
+    const extractionDistance = this.player.position.distanceTo(
+      this.level.factory.objectivePoints.factoryEntry,
+    );
+    this.director.update(
+      dt,
+      this.player.position.x,
+      this.enemies.aliveInZone('exterior'),
+      extractionDistance,
+      this.player.alive,
+    );
+    this.truthReveal.update(dt);
 
     if (this.chainTest) this.chainTest.update(dt);
 
@@ -693,7 +950,7 @@ export class Game {
       }
     }
 
-    this.updateHud(dt, extractionDistance);
+    this.updateHud(dt);
 
     // Mission state is mirrored onto <body> as data attributes. This is the
     // only diagnostic that survives an isolated-world console (automated
@@ -701,10 +958,18 @@ export class Game {
     if (document.body.dataset.phase !== this.director.phase) {
       document.body.dataset.phase = this.director.phase;
     }
+    if (document.body.dataset.missionState !== this.director.state) {
+      document.body.dataset.missionState = this.director.state;
+    }
+    document.body.dataset.checkpoint = this.director.checkpoint;
+    document.body.dataset.missionFlags = this.missionFlagTrace();
+    document.body.dataset.bossPhase = String(this.warden.phase);
     const tick = Math.floor(this.clock.elapsed).toString();
     if (document.body.dataset.tick !== tick) document.body.dataset.tick = tick;
     document.body.dataset.blast = this.vfx.blastState;
-    if (this.enemyTrace) document.body.dataset.enemies = this.enemies.stateTrace;
+    if (this.enemyTrace) {
+      document.body.dataset.enemies = `${this.enemies.stateTrace} GK:${this.gatekeeper.stateTrace}`;
+    }
     // Render statistics, mirrored for the same reason as everything else here:
     // the debug panel needs a keypress and a focused canvas, neither of which
     // a scripted capture session reliably has.
@@ -746,13 +1011,92 @@ export class Game {
     }
     if (this.input.wasPressed('restart')) {
       this.overlays.hideEnd();
-      this.restart();
+      if (this.director.restartAtCheckpoint()) {
+        this.restoreCheckpointWorld(this.director.checkpoint);
+      } else {
+        this.restartFromBriefing(false);
+      }
     }
-    // F cycles the performance readout.
-    if (this.input.wasPressed('interact')) this.hud.togglePerf();
+    if (this.input.wasPressed('interact')) this.handleInteraction();
   }
 
-  private updateHud(dt: number, extractionDistance: number): void {
+  private handleInteraction(): void {
+    if (!this.director.inputPermissions.interact) return;
+    if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
+      this.accessModule.getWorldPosition(this.tmpVec);
+      if (this.tmpVec.distanceTo(this.player.position) <= 2.6) {
+        this.accessModule.visible = false;
+        this.accessModule = null;
+        this.director.setFlag('moduleAcquired', true);
+        this.level.factory.setAccessModuleAcquired(true);
+        return;
+      }
+    }
+
+    const result = this.level.factory.interact(this.player.position);
+    if (!result.handled) return;
+    if (result.kind === 'gate_terminal') {
+      this.director.setFlag('atGateTerminal', true);
+      this.director.setFlag('gateOpen', true);
+    } else if (result.kind === 'hostage_release_terminal') {
+      this.director.setFlag('hostagesReleased', true);
+    }
+  }
+
+  private updateFactoryHazards(dt: number): void {
+    this.hazardDamageCooldown = Math.max(0, this.hazardDamageCooldown - dt);
+    if (!this.director.inputPermissions.move) return;
+    const hazard = this.level.factory.queryHazard(this.player.position);
+    if (!hazard?.active) return;
+    this.player.velocity.addScaledVector(hazard.pushVelocity, Math.min(1, dt * 4));
+    if (hazard.damagePerSecond > 0 && this.hazardDamageCooldown <= 0) {
+      this.hazardDamageCooldown = 0.25;
+      this.tmpVec.copy(this.player.position).sub(hazard.pushVelocity);
+      this.player.damage(hazard.damagePerSecond * 0.25, this.tmpVec);
+    }
+  }
+
+  private updateMissionFlags(): void {
+    const factory = this.level.factory;
+    const position = this.player.position;
+    const inside = position.z > 14 && position.x > 12 && position.x < 46;
+    if (inside) this.director.setFlag('insideFactory', true);
+    if (position.distanceTo(factory.objectivePoints.hostageObservation) < 11) {
+      this.director.setFlag('hostagesSeen', true);
+    }
+    if (
+      this.enemies.aliveInZone('interior') === 0 &&
+      position.distanceTo(factory.objectivePoints.bossArena) < factory.bossArenaRadius + 1.5
+    ) {
+      this.director.setFlag('reachedControlRoom', true);
+    }
+    if (factory.gateState !== 'closed') this.director.setFlag('gateOpen', true);
+    if (factory.hostagesReleased) this.director.setFlag('hostagesReleased', true);
+    if (this.gatekeeper.defeated) {
+      this.director.setFlag('gatekeeperAlive', false);
+      this.director.setFlag('gatekeeperDefeated', true);
+    }
+    this.director.setFlag('bossRelaysDown', this.warden.phase > 1 ? 2 : this.director.flags.bossRelaysDown);
+    if (this.warden.phase > 2) this.director.setFlag('bossCoolantDown', true);
+    if (this.warden.defeated) this.director.setFlag('bossCoreDown', true);
+
+    const interaction = factory.queryInteraction(position);
+    if (interaction?.kind === 'gate_terminal' && this.director.flags.moduleAcquired) {
+      this.director.setFlag('atGateTerminal', true);
+    }
+  }
+
+  private updateHud(dt: number): void {
+    const state = this.director.state;
+    const exteriorRemaining = this.enemies.aliveInZone('exterior');
+    const interiorRemaining = this.enemies.aliveInZone('interior');
+    const counterLabel = state.startsWith('BOSS_')
+      ? `WEAK POINT ${(this.warden.weakPointHealth01 * 100).toFixed(0)}%`
+      : state.startsWith('GATEKEEPER_')
+        ? `ARMOUR CORE ${(this.gatekeeper.healthFraction * 100).toFixed(0)}%`
+        : this.director.flags.insideFactory
+          ? `ROBOT CONTACTS ${String(interiorRemaining).padStart(2, '0')}`
+          : `YARD CONTACTS ${String(exteriorRemaining).padStart(2, '0')}`;
     this.hud.update(dt, {
       mag: this.weapon.magAmmo,
       reserve: this.weapon.reserveAmmo,
@@ -766,13 +1110,25 @@ export class Game {
       enemiesRemaining: this.enemies.aliveCount,
       enemiesTotal: this.enemies.totalCount,
       cameraYaw: this.view.yaw,
+      counterLabel,
     });
 
+    this.updateInteractionPrompt();
+    if (state.startsWith('BOSS_') && state !== 'BOSS_DEFEATED') {
+      this.hud.setBoss(CAST.boss, this.warden.phase, this.warden.weakPointHealth01, true);
+    } else if (state === 'GATEKEEPER_INTRO' || state === 'GATEKEEPER_ACTIVE') {
+      this.hud.setBoss(CAST.gatekeeper, 1, this.gatekeeper.healthFraction, true);
+    } else {
+      this.hud.setBoss('', 0, 0, false);
+    }
+
+    const objectivePoint = this.getObjectivePoint(this.tmpVec2);
+    const objectiveDistance = objectivePoint.distanceTo(this.player.position);
     this.hud.updateMarker(
-      this.tmpVec2.copy(this.level.extractionPoint).setY(2.4),
+      objectivePoint,
       this.view.camera,
-      this.director.phase === 'active',
-      `${extractionDistance.toFixed(0)}M`,
+      this.director.phase === 'active' && state !== 'TRUTH_REVEAL',
+      `${objectiveDistance.toFixed(0)}M`,
     );
 
     const stats = this.vfx.stats;
@@ -791,6 +1147,60 @@ export class Game {
     );
   }
 
+  private updateInteractionPrompt(): void {
+    if (!this.director.inputPermissions.interact) {
+      this.hud.setInteraction(null);
+      return;
+    }
+    if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
+      this.accessModule.getWorldPosition(this.tmpVec);
+      if (this.tmpVec.distanceTo(this.player.position) <= 2.6) {
+        this.hud.setInteraction('RECOVER ACCESS MODULE');
+        return;
+      }
+    }
+    const interaction = this.level.factory.queryInteraction(this.player.position);
+    this.hud.setInteraction(interaction ? interaction.prompt : null);
+  }
+
+  private getObjectivePoint(out: THREE.Vector3): THREE.Vector3 {
+    const points = this.level.factory.objectivePoints;
+    switch (this.director.state) {
+      case 'ACCESS_MODULE_DROPPED':
+        if (this.accessModule?.visible) return this.accessModule.getWorldPosition(out).setY(1.3);
+        return out.copy(this.level.factory.gatekeeperSpawn).setY(1.3);
+      case 'ACCESS_MODULE_ACQUIRED':
+      case 'GATE_TERMINAL_ACTIVE':
+      case 'GATE_OPENING':
+        return out.copy(points.gateTerminal).setY(1.8);
+      case 'FACTORY_ENTRY':
+        return out.copy(points.factoryEntry).setY(1.8);
+      case 'INTERIOR_APPROACH':
+        return out.copy(points.hostageObservation).setY(1.8);
+      case 'HOSTAGES_DISCOVERED':
+      case 'BOSS_INTRO':
+        return out.copy(points.bossArena).setY(2.2);
+      case 'BOSS_PHASE_1':
+      case 'BOSS_PHASE_2':
+      case 'BOSS_PHASE_3':
+        return this.warden.weakPointPosition(out);
+      case 'HOSTAGE_RELEASE':
+        return out.copy(points.releaseTerminal).setY(1.8);
+      case 'EXTRACTION':
+        return out.copy(points.factoryEntry).setY(1.8);
+      default:
+        return out.copy(this.level.factory.gatekeeperSpawn).setY(2.2);
+    }
+  }
+
+  private missionFlagTrace(): string {
+    const f = this.director.flags;
+    return `ext=${f.exteriorHostilesRemaining} gk=${Number(f.gatekeeperDefeated)} ` +
+      `mod=${Number(f.moduleAcquired)} gate=${Number(f.gateOpen)} inside=${Number(f.insideFactory)} ` +
+      `hostages=${Number(f.hostagesSeen)}/${Number(f.hostagesReleased)} ` +
+      `boss=${f.bossRelaysDown}/${Number(f.bossCoolantDown)}/${Number(f.bossCoreDown)}`;
+  }
+
   private reloadProgress(): number {
     // The weapon owns the timer; the HUD only needs the normalised value.
     return clamp01(this.weaponReloadFraction);
@@ -800,6 +1210,23 @@ export class Game {
   private get weaponReloadFraction(): number {
     const w = this.weapon as unknown as { reloadTimer: number; reloadDuration: number };
     return w.reloadDuration > 0 ? w.reloadTimer / w.reloadDuration : 0;
+  }
+
+  private onMissionStateChanged(state: MissionState, _previous: MissionState): void {
+    if (state === 'RESTARTING') {
+      this.retries++;
+      this.overlays.hideEnd();
+      this.restoreCheckpointWorld(this.director.checkpoint);
+      this.input.requestLock();
+      return;
+    }
+    if (state === 'HOSTAGE_RELEASE') {
+      this.truthReveal.reset();
+      this.overlays.hideTruth();
+    }
+    if (state === 'BOSS_DEFEATED') this.level.factory.setBossDefeated(true);
+    if (state === 'PLAYER_DEAD') this.onMissionEnded(false);
+    if (state === 'MISSION_COMPLETE') this.onMissionEnded(true);
   }
 
   private onMissionEnded(success: boolean): void {
@@ -812,12 +1239,15 @@ export class Game {
       ['HOSTILES DOWN', `${this.enemies.killCount} / ${this.enemies.totalCount}`],
       ['ACCURACY', `${accuracy.toFixed(0)}%`],
       ['ROUNDS FIRED', String(this.ballistics.shotsFired)],
+      ['CHECKPOINT RETRIES', String(this.retries)],
     ]);
-    this.bus.emit('mission:complete', {
-      timeSec: this.director.missionTime,
-      kills: this.enemies.killCount,
-      accuracy: this.ballistics.accuracy,
-    });
+    if (success) {
+      this.bus.emit('mission:complete', {
+        timeSec: this.director.missionTime,
+        kills: this.enemies.killCount,
+        accuracy: this.ballistics.accuracy,
+      });
+    }
   }
 
   dispose(): void {

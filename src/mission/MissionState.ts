@@ -35,6 +35,75 @@ export type MissionState =
   | 'PLAYER_DEAD'
   | 'RESTARTING';
 
+/**
+ * Input capabilities are authored per mission state rather than collapsed into
+ * a single "playable" boolean. Story beats such as the truth reveal still let
+ * the player look around, while death and restart suppress every action.
+ */
+export interface MissionInputPermissions {
+  readonly look: boolean;
+  readonly move: boolean;
+  readonly fire: boolean;
+  readonly interact: boolean;
+}
+
+const NO_INPUT: MissionInputPermissions = Object.freeze({
+  look: false,
+  move: false,
+  fire: false,
+  interact: false,
+});
+
+const LOOK_ONLY: MissionInputPermissions = Object.freeze({
+  look: true,
+  move: false,
+  fire: false,
+  interact: false,
+});
+
+const FULL_CONTROL: MissionInputPermissions = Object.freeze({
+  look: true,
+  move: true,
+  fire: true,
+  interact: true,
+});
+
+const CONTROL_NO_INTERACT: MissionInputPermissions = Object.freeze({
+  look: true,
+  move: true,
+  fire: true,
+  interact: false,
+});
+
+/** The only source of truth for which input families a state permits. */
+export const INPUT_OF: Readonly<Record<MissionState, MissionInputPermissions>> = {
+  BOOT: NO_INPUT,
+  BRIEFING: NO_INPUT,
+  EXTERIOR_ENTRY: LOOK_ONLY,
+  EXTERIOR_COMBAT: FULL_CONTROL,
+  GATEKEEPER_INTRO: CONTROL_NO_INTERACT,
+  GATEKEEPER_ACTIVE: CONTROL_NO_INTERACT,
+  GATEKEEPER_DEFEATED: FULL_CONTROL,
+  ACCESS_MODULE_DROPPED: FULL_CONTROL,
+  ACCESS_MODULE_ACQUIRED: FULL_CONTROL,
+  GATE_TERMINAL_ACTIVE: FULL_CONTROL,
+  GATE_OPENING: CONTROL_NO_INTERACT,
+  FACTORY_ENTRY: FULL_CONTROL,
+  INTERIOR_APPROACH: FULL_CONTROL,
+  HOSTAGES_DISCOVERED: FULL_CONTROL,
+  BOSS_INTRO: LOOK_ONLY,
+  BOSS_PHASE_1: CONTROL_NO_INTERACT,
+  BOSS_PHASE_2: CONTROL_NO_INTERACT,
+  BOSS_PHASE_3: CONTROL_NO_INTERACT,
+  BOSS_DEFEATED: LOOK_ONLY,
+  TRUTH_REVEAL: LOOK_ONLY,
+  HOSTAGE_RELEASE: FULL_CONTROL,
+  EXTRACTION: FULL_CONTROL,
+  MISSION_COMPLETE: NO_INPUT,
+  PLAYER_DEAD: NO_INPUT,
+  RESTARTING: NO_INPUT,
+};
+
 /** Declaration order, used for ordering comparisons and the debug menu. */
 export const MISSION_ORDER: readonly MissionState[] = [
   'BOOT',
@@ -116,23 +185,7 @@ export const CHECKPOINT_OF: Record<MissionState, Checkpoint> = {
  * enforced rather than remembered.
  */
 export const PLAYABLE: ReadonlySet<MissionState> = new Set<MissionState>([
-  'EXTERIOR_ENTRY',
-  'EXTERIOR_COMBAT',
-  'GATEKEEPER_INTRO',
-  'GATEKEEPER_ACTIVE',
-  'GATEKEEPER_DEFEATED',
-  'ACCESS_MODULE_DROPPED',
-  'ACCESS_MODULE_ACQUIRED',
-  'GATE_TERMINAL_ACTIVE',
-  'GATE_OPENING',
-  'FACTORY_ENTRY',
-  'INTERIOR_APPROACH',
-  'HOSTAGES_DISCOVERED',
-  'BOSS_PHASE_1',
-  'BOSS_PHASE_2',
-  'BOSS_PHASE_3',
-  'HOSTAGE_RELEASE',
-  'EXTRACTION',
+  ...MISSION_ORDER.filter((state) => INPUT_OF[state].move),
 ]);
 
 /** States during which hostiles may engage. */

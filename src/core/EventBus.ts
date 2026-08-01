@@ -79,7 +79,13 @@ export interface GameEvents {
   'player:landed': { impact: number };
   'player:footstep': { sprinting: boolean; surface: SurfaceKind };
 
-  'explosion': { position: THREE.Vector3; radius: number; power: number };
+  'explosion': {
+    position: THREE.Vector3;
+    radius: number;
+    power: number;
+    /** Visual-only boss beats set false; gameplay damage is never inferred. */
+    damagesPlayer?: boolean;
+  };
   'camera:shake': { amplitude: number; duration: number; frequency?: number };
 
   'mission:started': void;

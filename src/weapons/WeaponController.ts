@@ -203,6 +203,11 @@ export class WeaponController {
     this.triggerHeld = held;
   }
 
+  /** True while a trigger press is raising/holding the sight, including taps. */
+  get forcingAds(): boolean {
+    return this.triggerHeld || this.shotArmed || this.adsHold > 0;
+  }
+
   requestReload(): void {
     if (this.state === 'reloading') return;
     if (this.magAmmo >= WEAPON_CONFIG.magSize || this.reserveAmmo <= 0) return;
@@ -249,9 +254,9 @@ export class WeaponController {
       this.adsHold = Math.max(0, this.adsHold - dt);
     }
     const forcedAds = this.triggerHeld || this.shotArmed || this.adsHold > 0;
-    // An armed shot that can never be taken has to be dropped, or the weapon
-    // stays raised forever after a trigger pull that began during a sprint.
-    if (this.shotArmed && !canAds) this.shotArmed = false;
+    // Keep an armed tap through sprint/reload. Game uses forcingAds to cancel a
+    // sprint, and a reload is finite; discarding here made a valid click vanish
+    // even though the no-hip-fire rule only requires delaying the round.
     const adsTarget = (wantsAds || forcedAds || this.debugPose === 'ads') && canAds ? 1 : 0;
     const previousAds = this.adsBlend > 0.5;
     // ADS uses a fixed-time approach rather than a damp so the transition

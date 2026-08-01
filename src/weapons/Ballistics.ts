@@ -1,10 +1,39 @@
 import * as THREE from 'three';
 import { WEAPON_CONFIG, ENEMY_CONFIG } from '@/config/gameplay';
+import type { GatekeeperController, GatekeeperHit } from '@/bosses/GatekeeperController';
+import type { Warden03Controller } from '@/bosses/Warden03Controller';
 import type { EventBus } from '@/core/EventBus';
-import type { CollisionWorld } from '@/physics/CollisionWorld';
-import type { EnemyManager } from '@/enemies/EnemyManager';
+import type { CollisionWorld, RaycastHit } from '@/physics/CollisionWorld';
 import type { VfxManager } from '@/effects/VfxManager';
 import type { Player } from '@/player/Player';
+
+export interface CombatTargetHit {
+  enemy: number;
+  point: THREE.Vector3;
+  normal: THREE.Vector3;
+  distance: number;
+  headshot: boolean;
+  zone: 'head' | 'torso' | 'legs';
+}
+
+/** Structural contract shared by the soldier and robot enemy managers. */
+export interface CombatTargetManager {
+  raycast(origin: THREE.Vector3, direction: THREE.Vector3, maxDistance: number): CombatTargetHit | null;
+  damage(index: number, amount: number, fromDirection: THREE.Vector3, headshot: boolean): boolean;
+}
+
+interface WardenHit {
+  point: THREE.Vector3;
+  normal: THREE.Vector3;
+  distance: number;
+  weak: boolean;
+}
+
+type PlayerShotHit =
+  | { kind: 'world'; hit: RaycastHit }
+  | { kind: 'enemy'; hit: CombatTargetHit }
+  | { kind: 'gatekeeper'; hit: GatekeeperHit }
+  | { kind: 'warden'; hit: WardenHit };
 
 /**
  * Shot resolution for both the player and the AI.
@@ -29,10 +58,12 @@ export class Ballistics {
 
   constructor(
     private readonly collision: CollisionWorld,
-    private readonly enemies: EnemyManager,
+    private readonly enemies: CombatTargetManager,
     private readonly vfx: VfxManager,
     private readonly bus: EventBus,
     private readonly player: Player,
+    private readonly gatekeeper: GatekeeperController | null = null,
+    private readonly warden: Warden03Controller | null = null,
   ) {}
 
   /** Resolves one player round. */
@@ -42,41 +73,94 @@ export class Ballistics {
 
     const worldHit = this.collision.raycast(origin, direction, range);
     const enemyHit = this.enemies.raycast(origin, direction, range);
+    const gatekeeperHit = this.gatekeeper?.raycast(origin, direction, range) ?? null;
+    const wardenHit = this.warden?.raycast(origin, direction, range) ?? null;
 
-    // Whichever is nearer wins. Enemies are tested against the world so you
-    // cannot shoot through a container and still hit a soldier behind it.
-    if (enemyHit && (!worldHit || enemyHit.distance < worldHit.distance)) {
+    // Resolve exactly one nearest candidate. Starting with the world means a
+    // distance tie is treated as cover instead of allowing a shot through it.
+    let resolved: PlayerShotHit | null = worldHit ? { kind: 'world', hit: worldHit } : null;
+    let nearestDistance = worldHit?.distance ?? range + 1;
+    if (enemyHit && enemyHit.distance < nearestDistance) {
+      resolved = { kind: 'enemy', hit: enemyHit };
+      nearestDistance = enemyHit.distance;
+    }
+    if (gatekeeperHit && gatekeeperHit.distance < nearestDistance) {
+      resolved = { kind: 'gatekeeper', hit: gatekeeperHit };
+      nearestDistance = gatekeeperHit.distance;
+    }
+    if (wardenHit && wardenHit.distance < nearestDistance) {
+      resolved = { kind: 'warden', hit: wardenHit };
+    }
+
+    if (resolved?.kind === 'enemy') {
+      const hit = resolved.hit;
       this.shotsHit++;
       // Head 2.4x, everything else full. See WEAPON_CONFIG.limbMultiplier for
       // why limbs are not discounted.
-      const zoneScale = enemyHit.headshot
+      const zoneScale = hit.headshot
         ? WEAPON_CONFIG.headshotMultiplier
-        : enemyHit.zone === 'legs'
+        : hit.zone === 'legs'
           ? WEAPON_CONFIG.limbMultiplier
           : 1;
       const damage = WEAPON_CONFIG.damage * zoneScale;
       this.incident.copy(direction);
-      const killed = this.enemies.damage(enemyHit.enemy, damage, this.incident, enemyHit.headshot);
+      const killed = this.enemies.damage(hit.enemy, damage, this.incident, hit.headshot);
       this.bus.emit('impact:enemy', {
-        point: enemyHit.point,
-        normal: enemyHit.normal,
-        headshot: enemyHit.headshot,
+        point: hit.point,
+        normal: hit.normal,
+        headshot: hit.headshot,
         killed,
       });
-      this.bus.emit('hitmarker', { headshot: enemyHit.headshot, killed });
-      this.vfx.spawnTracer(origin, direction, enemyHit.distance, true);
+      this.bus.emit('hitmarker', { headshot: hit.headshot, killed });
+      this.vfx.spawnTracer(origin, direction, hit.distance, true);
       return;
     }
 
-    if (worldHit) {
-      this.bus.emit('impact:surface', {
-        point: worldHit.point,
-        normal: worldHit.normal,
-        surface: worldHit.surface,
-        incident: direction.clone(),
-        distance: worldHit.point.distanceTo(listener),
+    if (resolved?.kind === 'gatekeeper' && this.gatekeeper) {
+      const hit = resolved.hit;
+      this.shotsHit++;
+      const wasDefeated = this.gatekeeper.defeated;
+      this.gatekeeper.damage(WEAPON_CONFIG.damage, hit.point);
+      const killed = !wasDefeated && this.gatekeeper.defeated;
+      const weakPoint = hit.zone === 'coil';
+      this.bus.emit('impact:enemy', {
+        point: hit.point,
+        normal: hit.normal,
+        headshot: weakPoint,
+        killed,
       });
-      this.vfx.spawnTracer(origin, direction, worldHit.distance, true);
+      this.bus.emit('hitmarker', { headshot: weakPoint, killed });
+      this.vfx.spawnTracer(origin, direction, hit.distance, true);
+      return;
+    }
+
+    if (resolved?.kind === 'warden' && this.warden) {
+      const hit = resolved.hit;
+      this.shotsHit++;
+      const wasDefeated = this.warden.defeated;
+      this.warden.damage(WEAPON_CONFIG.damage, hit.point);
+      const killed = !wasDefeated && this.warden.defeated;
+      this.bus.emit('impact:enemy', {
+        point: hit.point,
+        normal: hit.normal,
+        headshot: hit.weak,
+        killed,
+      });
+      this.bus.emit('hitmarker', { headshot: hit.weak, killed });
+      this.vfx.spawnTracer(origin, direction, hit.distance, true);
+      return;
+    }
+
+    if (resolved?.kind === 'world') {
+      const hit = resolved.hit;
+      this.bus.emit('impact:surface', {
+        point: hit.point,
+        normal: hit.normal,
+        surface: hit.surface,
+        incident: direction.clone(),
+        distance: hit.point.distanceTo(listener),
+      });
+      this.vfx.spawnTracer(origin, direction, hit.distance, true);
     } else {
       // Missed everything: the tracer still flies off into the fog.
       this.vfx.spawnTracer(origin, direction, range, true);

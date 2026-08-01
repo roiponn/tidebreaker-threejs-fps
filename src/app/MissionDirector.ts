@@ -1,7 +1,18 @@
 import * as THREE from 'three';
 import { MISSION_CONFIG } from '@/config/gameplay';
+import { CAST } from '@/config/mission';
 import type { EventBus } from '@/core/EventBus';
 import { clamp01, smoothstep } from '@/core/MathUtils';
+import { buildMissionGraph } from '@/mission/MissionGraph';
+import {
+  MissionStateMachine,
+  type MissionFlags,
+} from '@/mission/MissionStateMachine';
+import type {
+  Checkpoint,
+  MissionInputPermissions,
+  MissionState,
+} from '@/mission/MissionState';
 
 /**
  * Mission flow: the opening sequence, the objective state and the ending.
@@ -26,16 +37,16 @@ interface ChatterLine {
 }
 
 const CHATTER: ChatterLine[] = [
-  { at: 0.6, speaker: 'ACTUAL', text: 'Tidebreaker, storm has cleared. Berth seven is still lit.' },
-  { at: 3.4, speaker: 'ACTUAL', text: 'Push east to the pier head. Window closes in ninety seconds.' },
+  { at: 0.6, speaker: CAST.handler, text: 'Tidebreaker, three life signs confirmed. Perimeter systems are engaging.' },
+  { at: 3.4, speaker: CAST.handler, text: 'Breach the yard. The gate unit is carrying the physical authentication.' },
 ];
 
 export class MissionDirector {
-  phase: MissionPhase = 'briefing';
+  /** The sole authority for mission progression. Presentation never owns state. */
+  private readonly machine: MissionStateMachine;
+
   /** Seconds since the intro began. */
   timer = 0;
-  /** Seconds of active play, used for the end-of-mission stats. */
-  missionTime = 0;
 
   /**
    * 0..1 - how much the intro is still driving the camera.
@@ -52,38 +63,54 @@ export class MissionDirector {
   letterbox = false;
 
   private currentChatter = -1;
-  private objectiveIssued = false;
-  private extractionAnnounced = false;
 
   /** Hooks the game wires up. */
   onChatter: ((speaker: string | null, text: string | null) => void) | null = null;
   onLetterbox: ((show: boolean) => void) | null = null;
+  onStateChange: ((state: MissionState, previous: MissionState) => void) | null = null;
 
-  constructor(private readonly bus: EventBus) {}
+  constructor(private readonly bus: EventBus) {
+    this.machine = new MissionStateMachine(bus);
+    buildMissionGraph(this.machine);
+    this.machine.onEnter = (state, previous) => {
+      this.handleStateEnter(state, previous);
+      this.onStateChange?.(state, previous);
+    };
+    // BOOT is a pass-through implementation state. Commit BRIEFING now so the
+    // first user click always requests a legal BRIEFING -> EXTERIOR_ENTRY edge.
+    this.machine.update(0);
+  }
 
-  begin(): void {
-    this.phase = 'intro';
+  begin(): boolean {
+    if (this.machine.state !== 'BRIEFING') return false;
+    this.bus.emit('mission:started');
+    const accepted = this.machine.request('EXTERIOR_ENTRY');
+    // A click is a discrete action outside the frame update. Commit it now so
+    // the overlay and the first rendered insertion frame cannot disagree.
+    this.machine.update(0);
+    return accepted;
+  }
+
+  private startIntroPresentation(): void {
     this.timer = 0;
-    this.missionTime = 0;
     this.introBlend = 1;
     this.fade = 1;
     this.letterbox = true;
     this.currentChatter = -1;
-    this.objectiveIssued = false;
-    this.extractionAnnounced = false;
+    this.machine.ctx.flags.introComplete = false;
     this.onLetterbox?.(true);
-    this.bus.emit('mission:started');
   }
 
   reset(): void {
-    this.phase = 'briefing';
+    this.machine.resetAll();
     this.timer = 0;
-    this.missionTime = 0;
     this.introBlend = 0;
     this.fade = 0;
     this.letterbox = false;
+    this.currentChatter = -1;
     this.onLetterbox?.(false);
     this.onChatter?.(null, null);
+    this.machine.update(0);
   }
 
   /**
@@ -104,78 +131,141 @@ export class MissionDirector {
   }
 
   update(dt: number, playerX: number, enemiesRemaining: number, extractionDistance: number, playerAlive: boolean): void {
-    switch (this.phase) {
-      case 'intro': {
-        this.timer += dt;
-        const duration = MISSION_CONFIG.introDurationSec;
-        // Fade up over the first second.
-        this.fade = 1 - clamp01(this.timer / 1.1);
-        this.introBlend = 1 - clamp01((this.timer - duration * 0.55) / (duration * 0.45));
+    const ctx = this.machine.ctx;
+    ctx.playerX = playerX;
+    ctx.playerAlive = playerAlive;
+    ctx.flags.exteriorHostilesRemaining = enemiesRemaining;
+    ctx.flags.atExtraction =
+      this.machine.state === 'EXTRACTION' && extractionDistance < MISSION_CONFIG.extractRadius;
 
-        // Chatter.
-        for (let i = CHATTER.length - 1; i >= 0; i--) {
-          if (this.timer >= CHATTER[i].at && this.currentChatter < i) {
-            this.currentChatter = i;
-            this.onChatter?.(CHATTER[i].speaker, CHATTER[i].text);
-            break;
-          }
-        }
-        if (this.currentChatter >= 0 && this.timer > CHATTER[this.currentChatter].at + 2.6) {
-          this.onChatter?.(null, null);
-        }
-
-        if (this.timer >= duration) {
-          this.phase = 'active';
-          this.introBlend = 0;
-          this.letterbox = false;
-          this.onLetterbox?.(false);
-          this.onChatter?.(null, null);
-          this.bus.emit('mission:objective', { text: 'ADVANCE TO THE PIER HEAD' });
-        }
-        break;
-      }
-
-      case 'active': {
-        this.missionTime += dt;
-        if (!playerAlive) {
-          this.phase = 'failed';
-          this.bus.emit('mission:failed');
-          break;
-        }
-        // Objective escalation as the player progresses.
-        if (!this.objectiveIssued && playerX > 28) {
-          this.objectiveIssued = true;
-          this.bus.emit('mission:objective', { text: 'CLEAR THE YARD' });
-        }
-        if (!this.extractionAnnounced && playerX > 46) {
-          this.extractionAnnounced = true;
-          this.bus.emit('mission:objective', { text: 'REACH THE EXTRACTION PAD' });
-        }
-        if (extractionDistance < MISSION_CONFIG.extractRadius && enemiesRemaining <= 2) {
-          this.phase = 'complete';
-        }
-        break;
-      }
-
-      case 'complete':
-      case 'failed':
-        // Fade out under the end card.
-        this.fade = Math.min(1, this.fade + dt * 0.9);
-        break;
-
-      default:
-        break;
+    if (this.machine.state === 'EXTERIOR_ENTRY' && !ctx.flags.introComplete) {
+      this.updateIntroPresentation(dt);
     }
+
+    this.machine.update(dt);
+
+    if (this.machine.state === 'MISSION_COMPLETE' || this.machine.state === 'PLAYER_DEAD') {
+      // Fade out under the end card without making the fade a second state
+      // machine. The authoritative state is still the one above.
+      this.fade = Math.min(1, this.fade + dt * 0.9);
+    }
+  }
+
+  private updateIntroPresentation(dt: number): void {
+    this.timer += dt;
+    const duration = MISSION_CONFIG.introDurationSec;
+    // Fade up over the first second.
+    this.fade = 1 - clamp01(this.timer / 1.1);
+    this.introBlend = 1 - clamp01((this.timer - duration * 0.55) / (duration * 0.45));
+
+    for (let i = CHATTER.length - 1; i >= 0; i--) {
+      if (this.timer >= CHATTER[i].at && this.currentChatter < i) {
+        this.currentChatter = i;
+        this.onChatter?.(CHATTER[i].speaker, CHATTER[i].text);
+        break;
+      }
+    }
+    if (this.currentChatter >= 0 && this.timer > CHATTER[this.currentChatter].at + 2.6) {
+      this.onChatter?.(null, null);
+    }
+
+    if (this.timer >= duration) this.completeIntroPresentation();
+  }
+
+  private completeIntroPresentation(): void {
+    this.timer = MISSION_CONFIG.introDurationSec;
+    this.introBlend = 0;
+    this.fade = 0;
+    this.letterbox = false;
+    this.machine.ctx.flags.introComplete = true;
+    this.onLetterbox?.(false);
+    this.onChatter?.(null, null);
+  }
+
+  private handleStateEnter(state: MissionState, previous: MissionState): void {
+    if (state !== 'EXTERIOR_ENTRY') return;
+    if (previous === 'BRIEFING') {
+      this.startIntroPresentation();
+      return;
+    }
+    // A checkpoint retry must not replay the insertion camera. The state still
+    // passes through EXTERIOR_ENTRY so the legal graph and objective remain the
+    // same, but control is returned on the next update.
+    this.completeIntroPresentation();
   }
 
   /** Debug: end the intro immediately, running its normal completion path. */
   finishIntro(): void {
-    if (this.phase !== 'intro') return;
-    this.timer = MISSION_CONFIG.introDurationSec;
+    if (this.machine.state !== 'EXTERIOR_ENTRY') return;
+    this.completeIntroPresentation();
+  }
+
+  /** Legacy coarse phase for the existing overlay/end-card bridge. */
+  get phase(): MissionPhase {
+    switch (this.machine.state) {
+      case 'BOOT':
+      case 'BRIEFING':
+        return 'briefing';
+      case 'EXTERIOR_ENTRY':
+        return this.machine.ctx.flags.introComplete ? 'active' : 'intro';
+      case 'MISSION_COMPLETE':
+        return 'complete';
+      case 'PLAYER_DEAD':
+      case 'RESTARTING':
+        return 'failed';
+      default:
+        return 'active';
+    }
   }
 
   get isPlayable(): boolean {
-    return this.phase === 'active';
+    return this.machine.inputPermissions.move;
+  }
+
+  get state(): MissionState {
+    return this.machine.state;
+  }
+
+  get inputPermissions(): MissionInputPermissions {
+    return this.machine.inputPermissions;
+  }
+
+  get flags(): MissionFlags {
+    return this.machine.ctx.flags;
+  }
+
+  get checkpoint(): Checkpoint {
+    return this.machine.checkpoint;
+  }
+
+  get missionTime(): number {
+    return this.machine.ctx.missionTime;
+  }
+
+  get combatActive(): boolean {
+    return this.machine.combatActive;
+  }
+
+  requestState(next: MissionState): boolean {
+    return this.machine.request(next);
+  }
+
+  /** Debug-only jump. Callers must restore matching world state first. */
+  debugForceState(next: MissionState): void {
+    this.machine.forceTo(next);
+    this.machine.update(0);
+  }
+
+  restartAtCheckpoint(): boolean {
+    return this.machine.restartAtCheckpoint();
+  }
+
+  setFlag<K extends keyof MissionFlags>(key: K, value: MissionFlags[K]): void {
+    this.machine.ctx.flags[key] = value;
+  }
+
+  hasReached(state: MissionState): boolean {
+    return this.machine.hasReached(state);
   }
 }
 

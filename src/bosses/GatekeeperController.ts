@@ -278,7 +278,7 @@ export class GatekeeperController {
    */
   raycast(origin: THREE.Vector3, direction: THREE.Vector3, maxDistance: number): GatekeeperHit | null {
     const rig = this.rig;
-    if (!rig || this.state === 'dead') return null;
+    if (!rig || !this.group.visible || this.state === 'dead') return null;
 
     let bestDistance = -1;
     let bestScore = Infinity;

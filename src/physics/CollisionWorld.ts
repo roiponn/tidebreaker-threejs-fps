@@ -28,6 +28,9 @@ export interface RaycastHit {
   object: THREE.Object3D | null;
 }
 
+/** Stable index returned for collision boxes whose solid state changes at runtime. */
+export type CollisionBoxHandle = number;
+
 const tmpBox = new THREE.Box3();
 const tmpVec = new THREE.Vector3();
 
@@ -40,11 +43,17 @@ export class CollisionWorld {
   private grid = new Map<number, number[]>();
   private readonly cellSize = 6;
 
-  addBox(min: THREE.Vector3, max: THREE.Vector3, surface: SurfaceKind, solid = true): void {
+  addBox(
+    min: THREE.Vector3,
+    max: THREE.Vector3,
+    surface: SurfaceKind,
+    solid = true,
+  ): CollisionBoxHandle {
     const box: CollisionBox = { min: min.clone(), max: max.clone(), surface, solid };
     const index = this.boxes.length;
     this.boxes.push(box);
-    if (!solid) return;
+    // Non-solid boxes are indexed too so a dynamic obstacle (a roller door,
+    // for example) can be enabled later without rebuilding the spatial grid.
     const x0 = Math.floor(min.x / this.cellSize);
     const x1 = Math.floor(max.x / this.cellSize);
     const z0 = Math.floor(min.z / this.cellSize);
@@ -60,6 +69,18 @@ export class CollisionWorld {
         cell.push(index);
       }
     }
+    return index;
+  }
+
+  /** Enables/disables movement blocking without changing bullet raycasts. */
+  setBoxSolid(handle: CollisionBoxHandle, solid: boolean): void {
+    const box = this.boxes[handle];
+    if (!box) return;
+    box.solid = solid;
+  }
+
+  isBoxSolid(handle: CollisionBoxHandle): boolean {
+    return this.boxes[handle]?.solid ?? false;
   }
 
   /** Registers an object3D from its world bounding box. */

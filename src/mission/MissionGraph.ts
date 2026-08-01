@@ -17,8 +17,6 @@ const AI = MISSION_V2.aiLines;
  * line, check it survives the second playthrough without becoming a lie.
  */
 export function buildMissionGraph(m: MissionStateMachine): void {
-  const { flags } = m.ctx;
-
   m.define('BOOT', {
     update: () => 'BRIEFING',
   });
@@ -30,7 +28,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
 
   m.define('EXTERIOR_ENTRY', {
     enter: (ctx) => ctx.say('open', CAST.handler, L.exteriorOpen),
-    update: (ctx) => (ctx.time > 3 ? 'EXTERIOR_COMBAT' : null),
+    update: (ctx) => (ctx.flags.introComplete ? 'EXTERIOR_COMBAT' : null),
   });
 
   m.define('EXTERIOR_COMBAT', {
@@ -41,7 +39,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
       if (ctx.playerX > MISSION_V2.exterior.dockDiscoverX) {
         ctx.say('dock', CAST.handler, L.dockLocked);
       }
-      return flags.exteriorHostilesRemaining <= MISSION_V2.exterior.clearBeforeGatekeeper
+      return ctx.flags.exteriorHostilesRemaining <= MISSION_V2.exterior.clearBeforeGatekeeper
         ? 'GATEKEEPER_INTRO'
         : null;
     },
@@ -49,7 +47,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
 
   m.define('GATEKEEPER_INTRO', {
     enter: (ctx) => {
-      flags.gatekeeperAlive = true;
+      ctx.flags.gatekeeperAlive = true;
       ctx.say('gk', CAST.handler, L.gatekeeperSpotted);
       ctx.bus.emit('mission:gatekeeperSpawn');
     },
@@ -59,7 +57,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
   });
 
   m.define('GATEKEEPER_ACTIVE', {
-    update: () => (flags.gatekeeperDefeated ? 'GATEKEEPER_DEFEATED' : null),
+    update: (ctx) => (ctx.flags.gatekeeperDefeated ? 'GATEKEEPER_DEFEATED' : null),
   });
 
   m.define('GATEKEEPER_DEFEATED', {
@@ -69,7 +67,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
   });
 
   m.define('ACCESS_MODULE_DROPPED', {
-    update: () => (flags.moduleAcquired ? 'ACCESS_MODULE_ACQUIRED' : null),
+    update: (ctx) => (ctx.flags.moduleAcquired ? 'ACCESS_MODULE_ACQUIRED' : null),
   });
 
   m.define('ACCESS_MODULE_ACQUIRED', {
@@ -77,13 +75,13 @@ export function buildMissionGraph(m: MissionStateMachine): void {
       ctx.say('modtaken', CAST.handler, L.moduleTaken);
       ctx.say('ai-restrict', CAST.factoryAi, AI.restrict);
     },
-    update: () => (flags.atGateTerminal ? 'GATE_TERMINAL_ACTIVE' : null),
+    update: (ctx) => (ctx.flags.atGateTerminal ? 'GATE_TERMINAL_ACTIVE' : null),
   });
 
   m.define('GATE_TERMINAL_ACTIVE', {
     // Waits for the player to actually use the terminal - the interaction sets
     // gateOpen once authentication completes.
-    update: () => (flags.gateOpen ? 'GATE_OPENING' : null),
+    update: (ctx) => (ctx.flags.gateOpen ? 'GATE_OPENING' : null),
   });
 
   m.define('GATE_OPENING', {
@@ -98,12 +96,12 @@ export function buildMissionGraph(m: MissionStateMachine): void {
 
   m.define('FACTORY_ENTRY', {
     enter: (ctx) => ctx.say('inside', CAST.handler, L.interiorEntry),
-    update: () => (flags.insideFactory ? 'INTERIOR_APPROACH' : null),
+    update: (ctx) => (ctx.flags.insideFactory ? 'INTERIOR_APPROACH' : null),
   });
 
   m.define('INTERIOR_APPROACH', {
     enter: (ctx) => ctx.say('ai-maintain', CAST.factoryAi, AI.maintain),
-    update: () => (flags.hostagesSeen ? 'HOSTAGES_DISCOVERED' : null),
+    update: (ctx) => (ctx.flags.hostagesSeen ? 'HOSTAGES_DISCOVERED' : null),
   });
 
   m.define('HOSTAGES_DISCOVERED', {
@@ -112,7 +110,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
       // The first appearance of the phrase. Never explained until the end.
       ctx.say('ai-subjects', CAST.factoryAi, AI.subjects);
     },
-    update: () => (flags.reachedControlRoom ? 'BOSS_INTRO' : null),
+    update: (ctx) => (ctx.flags.reachedControlRoom ? 'BOSS_INTRO' : null),
   });
 
   m.define('BOSS_INTRO', {
@@ -126,13 +124,13 @@ export function buildMissionGraph(m: MissionStateMachine): void {
   });
 
   m.define('BOSS_PHASE_1', {
-    update: () =>
-      flags.bossRelaysDown >= MISSION_V2.boss.phase1Relays ? 'BOSS_PHASE_2' : null,
+    update: (ctx) =>
+      ctx.flags.bossRelaysDown >= MISSION_V2.boss.phase1Relays ? 'BOSS_PHASE_2' : null,
   });
 
   m.define('BOSS_PHASE_2', {
     enter: (ctx) => ctx.say('p2', CAST.handler, L.bossPhase2),
-    update: () => (flags.bossCoolantDown ? 'BOSS_PHASE_3' : null),
+    update: (ctx) => (ctx.flags.bossCoolantDown ? 'BOSS_PHASE_3' : null),
   });
 
   m.define('BOSS_PHASE_3', {
@@ -140,7 +138,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
       ctx.say('p3', CAST.handler, L.bossPhase3);
       ctx.bus.emit('mission:emergencyLighting', { on: true });
     },
-    update: () => (flags.bossCoreDown ? 'BOSS_DEFEATED' : null),
+    update: (ctx) => (ctx.flags.bossCoreDown ? 'BOSS_DEFEATED' : null),
   });
 
   m.define('BOSS_DEFEATED', {
@@ -164,7 +162,7 @@ export function buildMissionGraph(m: MissionStateMachine): void {
 
   m.define('HOSTAGE_RELEASE', {
     enter: (ctx) => ctx.say('release', CAST.handler, L.release),
-    update: () => (flags.hostagesReleased ? 'EXTRACTION' : null),
+    update: (ctx) => (ctx.flags.hostagesReleased ? 'EXTRACTION' : null),
   });
 
   m.define('EXTRACTION', {
@@ -172,10 +170,12 @@ export function buildMissionGraph(m: MissionStateMachine): void {
       ctx.say('complete', CAST.handler, L.complete);
       ctx.bus.emit('mission:extraction');
     },
-    update: () => (flags.atExtraction ? 'MISSION_COMPLETE' : null),
+    update: (ctx) => (ctx.flags.atExtraction ? 'MISSION_COMPLETE' : null),
   });
 
   m.define('MISSION_COMPLETE', {});
-  m.define('PLAYER_DEAD', {});
+  m.define('PLAYER_DEAD', {
+    enter: (ctx) => ctx.bus.emit('mission:failed'),
+  });
   m.define('RESTARTING', {});
 }

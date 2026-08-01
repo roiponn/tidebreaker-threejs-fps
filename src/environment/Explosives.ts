@@ -176,6 +176,7 @@ export class Explosives {
       position,
       radius: this.visual.explosion.radius,
       power: 1,
+      damagesPlayer: true,
     });
     // CHAIN REACTION.
     //

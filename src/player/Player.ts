@@ -25,6 +25,8 @@ export class Player {
   grounded = false;
   health: number = PLAYER_CONFIG.health;
   alive = true;
+  /** Debug-only damage bypass, enabled by ?god=1. */
+  invincible = false;
 
   private eyeHeight: number = PLAYER_CONFIG.eyeHeightStand;
   private coyoteTimer = 0;
@@ -166,7 +168,9 @@ export class Player {
 
     // Keep the player inside the authored playspace. A soft wall, not a stop.
     this.position.x = clamp(this.position.x, -8.5, 60);
-    this.position.z = clamp(this.position.z, -13.4, 11.4);
+    // The north bound includes the now-playable factory interior. Its authored
+    // walls provide the readable limit; this clamp remains only a fail-safe.
+    this.position.z = clamp(this.position.z, -13.4, 64);
 
     this.speed = Math.hypot(this.velocity.x, this.velocity.z);
 
@@ -188,7 +192,7 @@ export class Player {
   }
 
   damage(amount: number, fromPosition: THREE.Vector3): void {
-    if (!this.alive) return;
+    if (!this.alive || this.invincible) return;
     this.health -= amount;
     this.timeSinceDamage = 0;
     this.damageDirection.subVectors(fromPosition, this.position).setY(0).normalize();
