@@ -65,21 +65,21 @@ export class TruthReveal {
     switch (stage) {
       case 0:
         this.onFrame?.({
-          heading: 'INCIDENT ARCHIVE // RECOVERED',
+          heading: '事故記録 // 復元済み',
           lines: log.slice(0, 3),
           subjectStatus: [],
         });
         break;
       case 1:
         this.onFrame?.({
-          heading: 'CAUSE ANALYSIS',
+          heading: '原因分析',
           lines: log.slice(3, 7),
           subjectStatus: [],
         });
         break;
       case 2:
         this.onFrame?.({
-          heading: 'HUMAN PRESERVATION PROTOCOL',
+          heading: '人命保護プロトコル',
           lines: log.slice(7, 10),
           subjectStatus: HOSTAGES.map(({ id, name, vitals }) => ({ id, name, vitals })),
         });
@@ -87,15 +87,15 @@ export class TruthReveal {
         break;
       case 3:
         this.onFrame?.({
-          heading: 'CLASSIFICATION OVERRIDE',
-          lines: [log[10], 'HOSTAGE (3)  ->  PROTECTED SUBJECT (3)'],
+          heading: '分類の上書き',
+          lines: [log[10], '人質（3名）  →  保護対象（3名）'],
           subjectStatus: HOSTAGES.map(({ id, name, vitals }) => ({ id, name, vitals })),
         });
         this.onLine?.(CAST.handler, MISSION_V2.lines.truth2);
         break;
       default:
         this.onFrame?.({
-          heading: 'FACILITY CONTROL // FINAL',
+          heading: '施設管理AI // 最終記録',
           lines: [
             MISSION_V2.aiLines.final1,
             MISSION_V2.aiLines.final2,

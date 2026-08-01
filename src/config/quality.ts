@@ -50,7 +50,7 @@ export interface QualitySettings {
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
   low: {
-    label: 'Performance',
+    label: '軽量',
     maxPixelRatio: 1,
     renderScale: 0.85,
     shadows: true,
@@ -72,7 +72,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     rainMultiplier: 0.5,
   },
   medium: {
-    label: 'Balanced',
+    label: '標準',
     maxPixelRatio: 1.5,
     renderScale: 1,
     shadows: true,
@@ -94,7 +94,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     rainMultiplier: 1,
   },
   high: {
-    label: 'Cinematic',
+    label: '高画質',
     maxPixelRatio: 2,
     renderScale: 1,
     shadows: true,

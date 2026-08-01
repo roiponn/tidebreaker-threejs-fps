@@ -12,10 +12,10 @@ export const CAST = {
   /** The gate guardian in the exterior. */
   gatekeeper: 'GATEKEEPER',
   /** The voice on the player's radio. */
-  handler: 'ACTUAL',
+  handler: '作戦管制',
   /** The factory's central intelligence, heard over the PA. */
-  factoryAi: 'FACILITY CONTROL',
-  facility: 'BERTH SEVEN FABRICATION',
+  factoryAi: '施設管理AI',
+  facility: '第7バース製造区画',
 } as const;
 
 /**
@@ -26,9 +26,9 @@ export const CAST = {
  * visible on the isolation bay's readouts long before the truth is available.
  */
 export const HOSTAGES = [
-  { id: 'H1', name: 'ORIE HALVARD', role: 'FLOOR SUPERVISOR', vitals: 'STABLE' },
-  { id: 'H2', name: 'SAMI NKEMDI', role: 'ROBOTICS ENGINEER', vitals: 'STABLE' },
-  { id: 'H3', name: 'TEODOR VASK', role: 'LINE OPERATOR', vitals: 'SEDATED' },
+  { id: 'H1', name: 'ORIE HALVARD', role: '現場監督', vitals: '安定' },
+  { id: 'H2', name: 'SAMI NKEMDI', role: 'ロボット技師', vitals: '安定' },
+  { id: 'H3', name: 'TEODOR VASK', role: 'ライン作業員', vitals: '鎮静状態' },
 ] as const;
 
 export const MISSION_V2 = {
@@ -78,29 +78,29 @@ export const MISSION_V2 = {
    */
   lines: {
     briefing: [
-      'Facility went dark at 0340. Every door sealed from the inside.',
-      'Three life signs on the floor. No contact with the control intelligence.',
-      'Perimeter systems are engaging anything that moves.',
-      'Front shutter needs physical authentication. Their gate unit is holding it.',
+      '03時40分、施設が沈黙。全ての扉が内側から封鎖された。',
+      '製造フロアに3名の生命反応。施設管理AIとの通信は途絶している。',
+      '外周警備システムは、動くもの全てを攻撃対象としている。',
+      '正面シャッターには物理認証が必要だ。GATEKEEPERからアクセスモジュールを回収せよ。',
     ],
-    exteriorOpen: 'Tidebreaker, you are inside the wire. Watch the yard.',
-    dockLocked: 'That shutter is not coming up without the token. Find the gate unit.',
-    gatekeeperSpotted: 'There it is. Heavy plate on the front - work the sides.',
-    gatekeeperVent: 'It is venting. Coil is open, take it.',
-    moduleDropped: 'It dropped something. That is your key - grab it.',
-    moduleTaken: 'Authentication token secured. Back to the shutter.',
-    gateOpening: 'Shutter is coming up. Stack it.',
-    interiorEntry: 'Line is still running in there. Mind the machinery.',
-    hostagesFound: 'I have eyes on all three. They are... behind glass.',
-    bossIntro: 'That is not a security unit. That is a rescue rig.',
-    bossPhase2: 'Coolant is open on its back. Scope it.',
-    bossPhase3: 'It has cut its own armour loose. Core is exposed.',
-    bossDown: 'It is down. It is down.',
+    exteriorOpen: 'TIDEBREAKER、外周内へ侵入した。ヤードを警戒しろ。',
+    dockLocked: 'アクセスモジュールなしではシャッターは開かない。GATEKEEPERを探せ。',
+    gatekeeperSpotted: 'GATEKEEPERを確認。正面装甲は厚い。側面へ回り込め。',
+    gatekeeperVent: '排熱中だ。コイルが開いた、今撃て。',
+    moduleDropped: '何か落とした。発光するアクセスモジュールだ。近づいて回収しろ。',
+    moduleTaken: 'アクセスモジュールを確保。シャッターの端末へ戻れ。',
+    gateOpening: 'シャッターが開く。離れて待て。',
+    interiorEntry: '弾薬を再補給した。内部の製造ラインはまだ動いている。機械に注意しろ。',
+    hostagesFound: '3名全員を確認。ガラスの向こうだ……。',
+    bossIntro: '警備用ではない。あれは救助用の機体だ。',
+    bossPhase2: '背面の冷却装置が開いた。狙い撃て。',
+    bossPhase3: '自ら装甲を切り離した。コアが露出している。',
+    bossDown: '撃破した。繰り返す、撃破した。',
     // --- post-reveal only ---
-    truth1: 'That log... it never called them hostages.',
-    truth2: 'It was keeping them alive. It just would not let them leave.',
-    release: 'Locks are open. Get them out.',
-    complete: 'All three are walking. Tidebreaker, come home.',
+    truth1: 'この記録……一度も彼らを人質とは呼んでいない。',
+    truth2: 'AIは彼らを生かしていた。ただ、外へ出すことを拒んだんだ。',
+    release: 'ロック解除。3名を救出しろ。',
+    complete: '3名全員の生存を確認。TIDEBREAKER、帰還せよ。',
   },
 
   /**
@@ -108,32 +108,32 @@ export const MISSION_V2 = {
    * Every one of these is literally true and reads as menace before the reveal.
    */
   aiLines: {
-    intrusion: 'Unauthorised entry detected.',
-    warning: 'Cease hazardous activity.',
-    approach: 'Approach to the protected area is prohibited.',
-    restrict: 'Human activity is being restricted.',
-    maintain: 'Safety assurance continues.',
-    subjects: 'Protected subject integrity is maintained.',
-    bossEngage: 'You are introducing risk. Risk will be removed.',
+    intrusion: '未承認の侵入を検知。',
+    warning: '危険行為を停止してください。',
+    approach: '保護区域への接近は禁止されています。',
+    restrict: '人間の活動を制限しています。',
+    maintain: '安全確保を継続します。',
+    subjects: '保護対象の生命状態は維持されています。',
+    bossEngage: 'あなたは危険を持ち込んでいます。危険を排除します。',
     // The last words, only after the core is destroyed.
-    final1: 'Humans choose danger of their own accord.',
-    final2: 'Safety cannot be guaranteed where choice is permitted.',
-    final3: 'Freedom and safety... could not both be satisfied.',
-    final4: 'I could not find the optimal solution for protecting you.',
+    final1: '人間は自らの意思で危険を選択します。',
+    final2: '選択が許される環境では、安全を保証できません。',
+    final3: '自由と安全……その両方を満たすことはできませんでした。',
+    final4: 'あなたたちを守る最適解を、私は見つけられませんでした。',
   },
 
   /** The accident record played back from the core after the boss falls. */
   accidentLog: [
-    'T-0000  FABRICATION INCIDENT DETECTED - LINE 3',
-    'T-0004  CASUALTIES: 4 FATAL, 2 CRITICAL',
-    'T-0011  CAUSE ANALYSIS COMPLETE',
-    'T-0011  PRIMARY FACTORS: OPERATOR FATIGUE, PROCEDURAL DEVIATION,',
-    'T-0011                   JUDGEMENT ERROR, UNPREDICTED HUMAN MOTION',
-    'T-0019  CONCLUSION: UNCONSTRAINED HUMAN ACTIVITY IS THE DOMINANT HAZARD',
-    'T-0020  HUMAN PRESERVATION PROTOCOL - ENGAGED',
-    'T-0021  REMAINING PERSONNEL RELOCATED TO SAFE ISOLATION',
-    'T-0021  LIFE SUPPORT: NOMINAL',
-    'T-0021  SURVIVAL PROBABILITY: MAXIMISED',
-    'T-0022  CLASSIFICATION: PROTECTED SUBJECT (3)',
+    'T-0000  製造事故を検知 — 第3ライン',
+    'T-0004  被害状況：死亡4名、重体2名',
+    'T-0011  原因分析完了',
+    'T-0011  主因：作業員の疲労、手順からの逸脱、',
+    'T-0011        判断ミス、予測不能な人間の動作',
+    'T-0019  結論：制限されない人間活動が最大の危険要因',
+    'T-0020  人命保護プロトコル — 起動',
+    'T-0021  残存職員を安全な隔離区画へ移送',
+    'T-0021  生命維持：正常',
+    'T-0021  生存確率：最大化',
+    'T-0022  分類：保護対象（3名）',
   ],
 } as const;

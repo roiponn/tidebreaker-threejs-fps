@@ -18,8 +18,8 @@
   --hud-text-dim: rgba(232, 238, 245, 0.45);
   --hud-danger: #ff5a44;
   --hud-good: #6ee7a0;
-  --hud-font: 'DIN Alternate', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
-  --hud-mono: 'SF Mono', 'Roboto Mono', 'Courier New', monospace;
+  --hud-font: 'DIN Alternate', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', 'Helvetica Neue', Arial, sans-serif;
+  --hud-mono: 'SF Mono', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', monospace;
 }
 
 * {
@@ -505,6 +505,19 @@ body {
   color: var(--hud-text);
   font-weight: 500;
   text-align: right;
+}
+
+.overlay .tutorial-note {
+  margin-top: 18px;
+  max-width: 520px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 180, 92, 0.24);
+  background: rgba(255, 180, 92, 0.06);
+  color: rgba(255, 220, 180, 0.9);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-align: center;
 }
 
 .overlay .prompt {
@@ -1025,6 +1038,13 @@ body {
     margin-top: 17px;
   }
 
+  .overlay .tutorial-note {
+    margin-top: 10px;
+    max-width: min(520px, 84vw);
+    padding: 6px 10px;
+    font-size: 9px;
+  }
+
   .status {
     left: max(2vw, env(safe-area-inset-left));
     bottom: auto;
@@ -1066,5 +1086,6 @@ body {
   .overlay h2 { margin-top: 6px; }
   .overlay .body { line-height: 1.35; }
   .overlay .controls { margin-top: 9px; }
+  .overlay .tutorial-note { margin-top: 7px; padding: 4px 8px; }
   .overlay .prompt { margin-top: 10px; }
 }

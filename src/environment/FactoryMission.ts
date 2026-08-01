@@ -237,12 +237,12 @@ export class FactoryMission {
         kind: 'gate_terminal',
         status,
         prompt: status === 'locked'
-          ? 'ACCESS MODULE REQUIRED'
+          ? 'アクセスモジュールが必要'
           : status === 'complete'
-            ? 'FACTORY GATE OPEN'
+            ? '工場ゲート開放済み'
             : status === 'busy'
-              ? 'AUTHENTICATING — STAND CLEAR'
-              : 'INSERT ACCESS MODULE',
+              ? '認証中 — シャッターから離れてください'
+              : 'アクセスモジュールを挿入',
         position: this.objectivePoints.gateTerminal.clone(),
         distance: gateDistance,
       };
@@ -253,10 +253,10 @@ export class FactoryMission {
       kind: 'hostage_release_terminal',
       status,
       prompt: status === 'locked'
-        ? 'WARDEN-03 OVERRIDE ACTIVE'
+        ? 'WARDEN-03のロックが有効'
         : status === 'complete'
-          ? 'PROTECTED SUBJECTS RELEASED'
-          : 'AUTHORIZE PROTECTED SUBJECT RELEASE',
+          ? '保護対象を解放済み'
+          : '保護対象の解放を承認',
       position: this.objectivePoints.releaseTerminal.clone(),
       distance: releaseDistance,
     };

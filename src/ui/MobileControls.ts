@@ -220,27 +220,27 @@ export class MobileControls {
 }
 
 const TEMPLATE = /* html */ `
-  <div class="mobile-look-pad" aria-label="Swipe to look"></div>
+  <div class="mobile-look-pad" aria-label="スワイプして視点移動"></div>
 
-  <div class="mobile-move-pad" aria-label="Move">
+  <div class="mobile-move-pad" aria-label="移動">
     <span class="mobile-move-ring"></span>
     <span class="mobile-move-knob"></span>
-    <small>MOVE / RUN</small>
+    <small>移動 / ダッシュ</small>
   </div>
 
-  <div class="mobile-actions" aria-label="Game controls">
-    <button class="mobile-action mobile-action-use" type="button" aria-label="Interact">USE</button>
-    <button class="mobile-action mobile-action-reload" type="button" aria-label="Reload">RLD</button>
-    <button class="mobile-action mobile-action-crouch" type="button" aria-label="Toggle crouch">C</button>
-    <button class="mobile-action mobile-action-jump" type="button" aria-label="Jump">JUMP</button>
-    <button class="mobile-action mobile-action-aim" type="button" aria-label="Aim down sights">ADS</button>
-    <button class="mobile-action mobile-action-fire" type="button" aria-label="Fire">FIRE</button>
+  <div class="mobile-actions" aria-label="ゲーム操作">
+    <button class="mobile-action mobile-action-use" type="button" aria-label="拾う・端末を操作">操作</button>
+    <button class="mobile-action mobile-action-reload" type="button" aria-label="リロード">装填</button>
+    <button class="mobile-action mobile-action-crouch" type="button" aria-label="しゃがむ・立つ">しゃがむ</button>
+    <button class="mobile-action mobile-action-jump" type="button" aria-label="ジャンプ">ジャンプ</button>
+    <button class="mobile-action mobile-action-aim" type="button" aria-label="照準をのぞく">照準</button>
+    <button class="mobile-action mobile-action-fire" type="button" aria-label="射撃">射撃</button>
   </div>
 
-  <div class="mobile-look-hint">SWIPE TO LOOK</div>
+  <div class="mobile-look-hint">スワイプで視点移動</div>
 
   <div class="rotate-device" role="status">
-    <b>ROTATE DEVICE</b>
-    <span>横向きでプレイしてください</span>
+    <b>端末を横向きにしてください</b>
+    <span>このゲームは横向き画面で操作します</span>
   </div>
 `;

@@ -118,7 +118,7 @@ export class Hud {
 
   private lastDamageDirection = new THREE.Vector3(0, 0, 1);
   private readonly interactionKey =
-    navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches ? 'USE' : 'F';
+    navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches ? '操作' : 'F';
 
   setHidden(hidden: boolean): void {
     this.hidden = hidden;
@@ -147,7 +147,7 @@ export class Hud {
   setBoss(name: string, phase: number, health01: number, visible: boolean): void {
     this.bossBar.classList.toggle('show', visible);
     if (!visible) return;
-    this.bossLabel.textContent = `${name}  //  PHASE ${phase}`;
+    this.bossLabel.textContent = `${name}  //  フェーズ ${phase}`;
     this.bossFill.style.transform = `scaleX(${clamp01(health01).toFixed(3)})`;
   }
 
@@ -225,14 +225,14 @@ export class Hud {
     }
 
     // --- stance ---
-    const stance = state.sprinting ? 'SPRINT' : state.crouched ? 'CROUCHED' : '';
+    const stance = state.sprinting ? 'ダッシュ' : state.crouched ? 'しゃがみ' : '';
     if (stance !== this.lastStance) {
       this.lastStance = stance;
       this.stanceEl.textContent = stance;
     }
 
     // --- objective counter ---
-    const counter = state.counterLabel ?? `HOSTILES ${String(state.enemiesRemaining).padStart(2, '0')} / ${String(
+    const counter = state.counterLabel ?? `敵残存 ${String(state.enemiesRemaining).padStart(2, '0')} / ${String(
       state.enemiesTotal,
     ).padStart(2, '0')}`;
     if (counter !== this.lastCounter) {
@@ -318,17 +318,17 @@ const TEMPLATE = /* html */ `
 
   <div class="marker">
     <span class="glyph"></span>
-    <span class="dist">EXTRACT</span>
+    <span class="dist">脱出地点</span>
   </div>
 
   <div class="objective">
-    <div class="heading">OBJECTIVE</div>
-    <div class="text">ADVANCE TO THE PIER HEAD</div>
-    <div class="counter">HOSTILES 00 / 00</div>
+    <div class="heading">任務</div>
+    <div class="text">桟橋先端へ進め</div>
+    <div class="counter">敵残存 00 / 00</div>
   </div>
 
   <div class="boss-bar">
-    <div class="label">WARDEN-03 // PHASE 1</div>
+    <div class="label">WARDEN-03 // フェーズ 1</div>
     <div class="track"><i></i></div>
   </div>
 
@@ -340,12 +340,12 @@ const TEMPLATE = /* html */ `
       <div class="mag">30</div>
       <div class="reserve">/ 180</div>
     </div>
-    <div class="reload-hint">PRESS R TO RELOAD</div>
+    <div class="reload-hint">Rでリロード</div>
     <div class="reload-bar"><i></i></div>
   </div>
 
   <div class="status">
-    <div class="label">CONDITION</div>
+    <div class="label">体力</div>
     <div class="bar"><i></i></div>
     <div class="stance"></div>
   </div>

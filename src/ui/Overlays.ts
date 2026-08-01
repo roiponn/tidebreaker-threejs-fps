@@ -89,8 +89,8 @@ export class Overlays {
   showBriefing(paused: boolean): void {
     this.briefing.classList.add('show');
     this.q<HTMLElement>('.briefing h2').textContent = paused
-      ? 'PAUSED // CLICK TO RESUME'
-      : 'OPERATION TIDEBREAKER // FABRICATION LOCKDOWN';
+      ? '一時停止中 // クリックで再開'
+      : 'TIDEBREAKER作戦 // 製造施設封鎖';
   }
 
   hideBriefing(): void {
@@ -146,11 +146,11 @@ export class Overlays {
   // --- end card ---
 
   showEnd(success: boolean, stats: Array<[string, string]>): void {
-    this.endTitle.textContent = success ? 'MISSION COMPLETE' : 'K.I.A.';
+    this.endTitle.textContent = success ? '任務完了' : '作戦失敗';
     this.endTitle.style.color = success ? '' : '#ff5a44';
     this.endSubtitle.textContent = success
-      ? '3 SURVIVORS RECOVERED // WARDEN-03 OFFLINE'
-      : 'TIDEBREAKER // MISSION FAILED';
+      ? '生存者3名を救出 // WARDEN-03 停止'
+      : 'TIDEBREAKER // 隊員戦闘不能';
     this.endStats.innerHTML = stats
       .map(([label, value]) => `<span>${label}</span><span>${value}</span>`)
       .join('');
@@ -177,61 +177,62 @@ const TEMPLATE = /* html */ `
   <div class="letterbox top"></div>
   <div class="letterbox bottom"></div>
   <div class="chatter"></div>
-  <div class="mouse-hint"><span>CLICK TO RECAPTURE MOUSE</span></div>
+  <div class="mouse-hint"><span>クリックしてマウス操作を再開</span></div>
 
   <div class="overlay briefing">
     <h1>TIDEBREAKER</h1>
-    <h2>OPERATION TIDEBREAKER // FABRICATION LOCKDOWN</h2>
+    <h2>TIDEBREAKER作戦 // 製造施設封鎖</h2>
     <div class="rule"></div>
     <div class="body"></div>
     <div class="controls desktop-brief-controls">
-      <b>W A S D</b><span>Move</span>
-      <b>MOUSE</b><span>Look</span>
-      <b>LEFT MOUSE</b><span>Fire</span>
-      <b>RIGHT MOUSE</b><span>Aim down sight</span>
-      <b>SHIFT</b><span>Sprint</span>
-      <b>CTRL / C</b><span>Crouch</span>
-      <b>SPACE</b><span>Jump</span>
-      <b>R</b><span>Reload</span>
-      <b>H</b><span>Toggle HUD</span>
-      <b>&#96;</b><span>Debug panel</span>
-      <b>P</b><span>Restart</span>
+      <b>W A S D</b><span>移動</span>
+      <b>マウス</b><span>視点移動</span>
+      <b>左クリック</b><span>射撃</span>
+      <b>右クリック</b><span>照準をのぞく</span>
+      <b>SHIFT</b><span>ダッシュ</span>
+      <b>CTRL / C</b><span>しゃがむ</span>
+      <b>SPACE</b><span>ジャンプ</span>
+      <b>R</b><span>リロード</span>
+      <b>F</b><span>拾う・端末を操作</span>
+      <b>ESC</b><span>マウス操作を解除</span>
+      <b>P</b><span>チェックポイントから再開</span>
     </div>
     <div class="controls mobile-brief-controls">
-      <b>LEFT STICK</b><span>Move / push fully to sprint</span>
-      <b>RIGHT SWIPE</b><span>Look</span>
-      <b>FIRE / ADS</b><span>Shoot / aim</span>
-      <b>ACTION KEYS</b><span>Jump / reload / use / crouch</span>
+      <b>左スティック</b><span>移動 / 大きく倒すとダッシュ</span>
+      <b>右側をスワイプ</b><span>視点移動</span>
+      <b>射撃 / 照準</b><span>撃つ / 照準をのぞく</span>
+      <b>操作ボタン</b><span>ジャンプ / 装填 / 拾う / しゃがむ</span>
     </div>
-    <div class="prompt"><span class="desktop-start-copy">CLICK</span><span class="mobile-start-copy">TAP</span> TO BEGIN INSERTION</div>
+    <div class="tutorial-note">画面上部の「任務」とひし形マーカーを追って進んでください。</div>
+    <div class="prompt"><span class="desktop-start-copy">クリック</span><span class="mobile-start-copy">タップ</span>して作戦開始</div>
   </div>
 
   <div class="truth-reveal">
-    <div class="eyebrow">CORE RECORD PLAYBACK</div>
-    <h2>INCIDENT ARCHIVE</h2>
+    <div class="eyebrow">コア記録を再生中</div>
+    <h2>事故記録</h2>
     <div class="log"></div>
     <div class="subjects"></div>
   </div>
 
   <div class="overlay endcard">
-    <h1>MISSION COMPLETE</h1>
-    <h2>3 SURVIVORS RECOVERED // WARDEN-03 OFFLINE</h2>
+    <h1>任務完了</h1>
+    <h2>生存者3名を救出 // WARDEN-03 停止</h2>
     <div class="rule"></div>
     <div class="stats"></div>
     <div class="end-actions">
-      <button class="retry" type="button">RETRY FROM CHECKPOINT</button>
-      <button class="title-return" type="button">RETURN TO BRIEFING</button>
+      <button class="retry" type="button">チェックポイントから再開</button>
+      <button class="title-return" type="button">作戦説明へ戻る</button>
     </div>
   </div>
 
   <div class="loader">
     <div class="title">TIDEBREAKER</div>
     <div class="track"><i></i></div>
-    <div class="step">INITIALISING</div>
+    <div class="step">初期化中</div>
   </div>
 
   <div class="fatal">
-    <h1>RENDERER FAILED TO START</h1>
+    <h1>ゲーム画面を起動できませんでした</h1>
     <pre></pre>
   </div>
 `;

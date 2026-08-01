@@ -171,14 +171,14 @@ export class Game {
     try {
       const quality = QUALITY_PRESETS[this.qualityLevel];
 
-      await this.stage(0.05, 'INSTALLING SHADERS', () => {
+      await this.stage(0.05, 'シェーダーを準備中', () => {
         // Must happen before ANY material is compiled.
         installFogPatch();
         this.renderSystem = new RenderSystem(this.canvas, quality, this.visual);
         this.disposer.track(this.renderSystem);
       });
 
-      await this.stage(0.2, 'GENERATING MATERIALS', () => {
+      await this.stage(0.2, '質感データを生成中', () => {
         this.textures = new TextureFactory(quality.anisotropy);
         this.disposer.track(this.textures);
         this.materials = new MaterialLibrary(this.textures);
@@ -186,7 +186,7 @@ export class Game {
         this.materials.setEnvIntensity(this.visual.ambient.envIntensity);
       });
 
-      await this.stage(0.45, 'BUILDING SKY', () => {
+      await this.stage(0.45, '空と照明を構築中', () => {
         this.sky = new SkyDome(this.visual);
         this.disposer.track(this.sky);
         this.scene.add(this.sky.mesh);
@@ -194,14 +194,14 @@ export class Game {
         this.disposer.track(this.lighting);
       });
 
-      await this.stage(0.6, 'ASSEMBLING BERTH 7', () => {
+      await this.stage(0.6, '第7バースを構築中', () => {
         this.level = new HarborLevel(this.materials, this.visual, quality, this.collision);
         this.disposer.track(this.level);
         this.scene.add(this.level.root);
         this.materials.setWetness(this.visual.wetness.global);
       });
 
-      await this.stage(0.75, 'PLACING HOSTILES', () => {
+      await this.stage(0.75, '敵ユニットを配置中', () => {
         this.view = new PlayerCamera(this.visual);
         this.renderSystem.configureCameras(this.view.camera, this.view.weaponCamera);
         this.scene.add(this.view.camera, this.view.weaponCamera);
@@ -239,7 +239,7 @@ export class Game {
         this.explosives.spawnAt(this.level.explosivePositions);
       });
 
-      await this.stage(0.88, 'CALIBRATING OPTICS', () => {
+      await this.stage(0.88, '照準器を調整中', () => {
         this.vfx = new VfxManager(this.bus, this.textures, this.materials, this.visual, quality);
         this.disposer.track(this.vfx);
         this.scene.add(this.vfx.group);
@@ -259,7 +259,7 @@ export class Game {
         );
       });
 
-      await this.stage(0.97, 'ESTABLISHING LINK', () => {
+      await this.stage(0.97, '作戦回線に接続中', () => {
         this.hud = new Hud(this.uiRoot, this.bus);
         this.disposer.track(this.hud);
         this.director = new MissionDirector(this.bus);
@@ -354,7 +354,7 @@ export class Game {
       // player sees is the scene, not a black flash.
       this.renderFrame(0);
 
-      this.overlays.setLoadProgress(1, 'READY');
+      this.overlays.setLoadProgress(1, '準備完了');
       this.overlays.hideLoader();
       this.overlays.showBriefing(false);
       this.start();
@@ -1112,12 +1112,12 @@ export class Game {
     const exteriorRemaining = this.humanoids.aliveCount;
     const interiorRemaining = this.enemies.aliveInZone('interior');
     const counterLabel = state.startsWith('BOSS_')
-      ? `WEAK POINT ${(this.warden.weakPointHealth01 * 100).toFixed(0)}%`
+      ? `弱点耐久 ${(this.warden.weakPointHealth01 * 100).toFixed(0)}%`
       : state.startsWith('GATEKEEPER_')
-        ? `ARMOUR CORE ${(this.gatekeeper.healthFraction * 100).toFixed(0)}%`
+        ? `装甲コア ${(this.gatekeeper.healthFraction * 100).toFixed(0)}%`
         : this.director.flags.insideFactory
-          ? `ROBOT CONTACTS ${String(interiorRemaining).padStart(2, '0')}`
-          : `YARD CONTACTS ${String(exteriorRemaining).padStart(2, '0')}`;
+          ? `ロボット残存 ${String(interiorRemaining).padStart(2, '0')}`
+          : `ヤード敵残存 ${String(exteriorRemaining).padStart(2, '0')}`;
     this.hud.update(dt, {
       mag: this.weapon.magAmmo,
       reserve: this.weapon.reserveAmmo,
@@ -1150,8 +1150,8 @@ export class Game {
       this.view.camera,
       this.director.phase === 'active' && state !== 'TRUTH_REVEAL',
       state === 'ACCESS_MODULE_DROPPED'
-        ? `ACCESS MODULE // ${objectiveDistance.toFixed(0)}M`
-        : `${objectiveDistance.toFixed(0)}M`,
+        ? `アクセスモジュール // ${objectiveDistance.toFixed(0)}m`
+        : `${objectiveDistance.toFixed(0)}m`,
       state === 'ACCESS_MODULE_DROPPED',
     );
 
@@ -1160,13 +1160,13 @@ export class Game {
     this.hud.setPerf(
       [
         `<b>${fps.toFixed(0)}</b> fps &nbsp; <b>${this.clock.smoothedFrameMs.toFixed(1)}</b> ms`,
-        `draw calls <b>${this.renderSystem.drawCalls}</b>`,
-        `triangles <b>${(this.renderSystem.triangles / 1000).toFixed(0)}k</b>`,
-        `textures <b>${this.renderSystem.textureCount}</b>`,
-        `particles <b>${stats.particles}</b> &nbsp; decals <b>${stats.decals}</b>`,
-        `lights <b>${this.level.practicals.count + 3}</b> &nbsp; boxes <b>${this.collision.boxCount}</b>`,
-        `quality <b>${QUALITY_PRESETS[this.qualityLevel].label}</b>`,
-        fps < 50 ? '<span class="warn">BELOW TARGET - try a lower preset</span>' : '',
+        `描画回数 <b>${this.renderSystem.drawCalls}</b>`,
+        `三角形 <b>${(this.renderSystem.triangles / 1000).toFixed(0)}k</b>`,
+        `テクスチャ <b>${this.renderSystem.textureCount}</b>`,
+        `粒子 <b>${stats.particles}</b> &nbsp; 弾痕 <b>${stats.decals}</b>`,
+        `光源 <b>${this.level.practicals.count + 3}</b> &nbsp; 衝突箱 <b>${this.collision.boxCount}</b>`,
+        `画質 <b>${QUALITY_PRESETS[this.qualityLevel].label}</b>`,
+        fps < 50 ? '<span class="warn">処理負荷が高めです — 画質を下げてください</span>' : '',
       ].join('<br>'),
     );
   }
@@ -1179,7 +1179,7 @@ export class Game {
     if (this.accessModule?.visible && this.director.state === 'ACCESS_MODULE_DROPPED') {
       this.accessModule.getWorldPosition(this.tmpVec);
       if (this.tmpVec.distanceTo(this.player.position) <= 4.2) {
-        this.hud.setInteraction('TAKE THE GLOWING ACCESS MODULE');
+        this.hud.setInteraction('発光するアクセスモジュールを回収');
         return;
       }
     }
@@ -1236,7 +1236,7 @@ export class Game {
     return w.reloadDuration > 0 ? w.reloadTimer / w.reloadDuration : 0;
   }
 
-  private onMissionStateChanged(state: MissionState, _previous: MissionState): void {
+  private onMissionStateChanged(state: MissionState, previous: MissionState): void {
     if (state === 'RESTARTING') {
       this.retries++;
       this.overlays.hideEnd();
@@ -1244,6 +1244,11 @@ export class Game {
       this.mobileControls.setActive(true);
       this.input.requestLock();
       return;
+    }
+    // The exterior mission is stage one. Refill both the magazine and reserve
+    // exactly once as the factory (stage two) begins.
+    if (state === 'FACTORY_ENTRY' && previous === 'GATE_OPENING') {
+      this.weapon.resupply();
     }
     if (state === 'HOSTAGE_RELEASE') {
       this.truthReveal.reset();
@@ -1261,14 +1266,14 @@ export class Game {
     this.audio.setAmbienceLevel(0.2);
     const accuracy = this.ballistics.accuracy * 100;
     this.overlays.showEnd(success, [
-      ['TIME', formatTime(this.director.missionTime)],
+      ['経過時間', formatTime(this.director.missionTime)],
       [
-        'HOSTILES DOWN',
+        '撃破数',
         `${this.humanoids.killCount + this.enemies.killCount} / ${this.humanoids.totalCount + this.enemies.totalCount}`,
       ],
-      ['ACCURACY', `${accuracy.toFixed(0)}%`],
-      ['ROUNDS FIRED', String(this.ballistics.shotsFired)],
-      ['CHECKPOINT RETRIES', String(this.retries)],
+      ['命中率', `${accuracy.toFixed(0)}%`],
+      ['発射弾数', String(this.ballistics.shotsFired)],
+      ['再開回数', String(this.retries)],
     ]);
     if (success) {
       this.bus.emit('mission:complete', {

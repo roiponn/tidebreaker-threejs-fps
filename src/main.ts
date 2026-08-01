@@ -14,7 +14,7 @@ function fail(message: string): void {
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
                 flex-direction:column;background:#05070b;color:#e8eef5;font-family:sans-serif;
                 text-align:center;padding:40px;">
-      <h1 style="font-size:16px;letter-spacing:0.3em;color:#ff5a44;margin:0 0 16px;">CANNOT START</h1>
+      <h1 style="font-size:16px;letter-spacing:0.2em;color:#ff5a44;margin:0 0 16px;">ゲームを起動できません</h1>
       <p style="font-size:13px;color:rgba(232,238,245,0.55);max-width:520px;line-height:1.7;">${message}</p>
     </div>`;
 }
@@ -23,12 +23,12 @@ const canvas = document.getElementById('viewport') as HTMLCanvasElement | null;
 const uiRoot = document.getElementById('ui-root');
 
 if (!canvas || !uiRoot) {
-  fail('The page did not load correctly: #viewport or #ui-root is missing.');
+  fail('ページを正しく読み込めませんでした。必要な画面要素が見つかりません。');
 } else if (!document.createElement('canvas').getContext('webgl2')) {
   // three r16x+ is WebGL2-only; say so plainly instead of throwing.
   fail(
-    'This demo needs WebGL 2, which this browser or GPU does not provide.<br>' +
-      'Try a recent Chrome, Edge or Firefox with hardware acceleration enabled.',
+    'このゲームにはWebGL 2が必要ですが、お使いのブラウザまたは端末では利用できません。<br>' +
+      'Chrome、Edge、Firefoxの最新版で、ハードウェアアクセラレーションを有効にしてお試しください。',
   );
 } else {
   const game = new Game(canvas, uiRoot);
