@@ -575,7 +575,12 @@ export class HarborLevel {
     const rearZ = FACTORY_LAYOUT.rearZ;
     const depth = rearZ - zFace;
     const wallThickness = 0.45;
-    this.slab(zone, x1 - x0, 0.3, depth, (x0 + x1) / 2, -0.15, (zFace + rearZ) / 2, this.mats.concrete());
+    // Keep the factory floor visibly above the harbour's wet-apron plane.
+    // Both surfaces previously ended at y=0, so the depth buffer alternated
+    // between them as the camera moved, producing the large flashing blocks
+    // seen across stage two. A 5 cm finished-floor rise removes that coplanar
+    // overlap while remaining well below the player's step height.
+    this.slab(zone, x1 - x0, 0.3, depth, (x0 + x1) / 2, -0.1, (zFace + rearZ) / 2, this.mats.concrete());
     this.slab(zone, x1 - x0, 0.35, depth, (x0 + x1) / 2, height - 0.175, (zFace + rearZ) / 2);
     this.slab(zone, wallThickness, height, depth, x0, height / 2, (zFace + rearZ) / 2);
     this.slab(zone, wallThickness, height, depth, x1, height / 2, (zFace + rearZ) / 2);
