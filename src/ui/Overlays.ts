@@ -200,7 +200,7 @@ const TEMPLATE = /* html */ `
     <div class="controls mobile-brief-controls">
       <b>左スティック</b><span>移動 / 大きく倒すとダッシュ</span>
       <b>右側をスワイプ</b><span>視点移動</span>
-      <b>射撃 / 照準</b><span>撃つ / 照準をのぞく</span>
+      <b>射撃 / 照準</b><span>押したままドラッグで狙いながら撃つ</span>
       <b>操作ボタン</b><span>ジャンプ / 装填 / 拾う / しゃがむ</span>
     </div>
     <div class="tutorial-note">画面上部の「任務」とひし形マーカーを追って進んでください。</div>
