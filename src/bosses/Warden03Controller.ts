@@ -152,18 +152,18 @@ const ATTACKS: Record<AttackDef['kind'], AttackDef> = {
   // Backhand sweep with the rescue clamp. It is the motion of clearing debris
   // off a casualty, and it passes through chest height - which is precisely why
   // crouching beats it.
-  sweep: { kind: 'sweep', windup: 1.3, strike: 0.3, recover: 1.0, minRange: 0, maxRange: 8.5, halfAngle: 0.95, damage: 12, cooldown: 4.2 },
+  sweep: { kind: 'sweep', windup: 1.3, strike: 0.3, recover: 1.0, minRange: 0, maxRange: 8.5, halfAngle: 0.95, damage: 16, cooldown: 4.2 },
   // Both manipulators driven into the deck. Expanding ring on the floor.
-  slam: { kind: 'slam', windup: 1.65, strike: 0.2, recover: 1.35, minRange: 0, maxRange: 12, halfAngle: Math.PI, damage: 15, cooldown: 7.2 },
+  slam: { kind: 'slam', windup: 1.65, strike: 0.2, recover: 1.35, minRange: 0, maxRange: 12, halfAngle: Math.PI, damage: 20, cooldown: 7.2 },
   // Fire suppressant. Barely hurts; it BLINDS, and that is the threat - it is
   // how a rescue rig moves someone who will not move: it makes the area
   // untenable rather than making the person dead.
-  foam: { kind: 'foam', windup: 2.4, strike: 1.4, recover: 1.15, minRange: 4, maxRange: 15, halfAngle: 0.5, damage: 4, cooldown: 9.5 },
+  foam: { kind: 'foam', windup: 2.4, strike: 1.4, recover: 1.15, minRange: 4, maxRange: 15, halfAngle: 0.5, damage: 6, cooldown: 9.5 },
   // Cutting torch. The single most dangerous thing on the machine and also the
   // shortest ranged - standing still next to it is the only way to be hit.
-  torch: { kind: 'torch', windup: 1.2, strike: 0.4, recover: 1.2, minRange: 0, maxRange: 5.2, halfAngle: 0.6, damage: 18, cooldown: 6.2 },
+  torch: { kind: 'torch', windup: 1.2, strike: 0.4, recover: 1.2, minRange: 0, maxRange: 5.2, halfAngle: 0.6, damage: 24, cooldown: 6.2 },
   // Emergency-power rush. Straight line only; it cannot steer mid-charge.
-  charge: { kind: 'charge', windup: 1.4, strike: 1.35, recover: 1.55, minRange: 7, maxRange: 24, halfAngle: 0.38, damage: 18, cooldown: 9.0 },
+  charge: { kind: 'charge', windup: 1.4, strike: 1.35, recover: 1.55, minRange: 7, maxRange: 24, halfAngle: 0.38, damage: 23, cooldown: 9.0 },
 };
 
 const PHASE_ATTACKS: Record<number, AttackDef['kind'][]> = {
