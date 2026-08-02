@@ -62,10 +62,11 @@ export const MISSION_V2 = {
   boss: {
     /** Per-phase health. Phase 1 is armour, not a health bar - see BOSS_DESIGN. */
     phase1Relays: 2,
-    phase2CoolantHealth: 620,
-    phase3CoreHealth: 480,
-    /** Front armour damage multiplier while sealed. Near zero on purpose. */
-    sealedDamageScale: 0.03,
+    phase2CoolantHealth: 360,
+    phase3CoreHealth: 300,
+    /** Armour hits still chip the current weak point so the fight never feels invulnerable. */
+    sealedDamageScale: 0.25,
+    exposedBodyDamageScale: 0.4,
   },
 
   /**
@@ -92,9 +93,9 @@ export const MISSION_V2 = {
     gateOpening: 'シャッターが開く。離れて待て。',
     interiorEntry: '弾薬を再補給した。内部の製造ラインはまだ動いている。機械に注意しろ。',
     hostagesFound: '3名全員を確認。ガラスの向こうだ……。',
-    bossIntro: '警備用ではない。あれは救助用の機体だ。',
-    bossPhase2: '背面の冷却装置が開いた。狙い撃て。',
-    bossPhase3: '自ら装甲を切り離した。コアが露出している。',
+    bossIntro: '救助機を改造したボスだ。まず側面で緑に光る2基の電力リレーを撃て。',
+    bossPhase2: '次は背面で橙色に光る冷却装置だ。回り込んで撃て。',
+    bossPhase3: '最後は胸部で赤く光るAIコアだ。集中射撃しろ。',
     bossDown: '撃破した。繰り返す、撃破した。',
     // --- post-reveal only ---
     truth1: 'この記録……一度も彼らを人質とは呼んでいない。',

@@ -154,13 +154,13 @@ export const WARDEN_METRICS = {
   /** Hit sphere radii for the three weak points, in metres.
    *
    * These are DELIBERATELY generous. The coolant stack in particular is the
-   * target the forced-ADS system exists for: a scoped shot at a 0.62m sphere
+   * target the forced-ADS system exists for: a scoped shot at a 0.94m sphere
    * on a slow-moving four-metre machine is an aiming beat, not a pixel hunt.
    * Shrinking these to "realistic" sizes is the fastest way to turn phase 2
    * from satisfying into miserable. */
-  relayRadius: 0.5,
-  coolantRadius: 0.62,
-  coreRadius: 0.45,
+  relayRadius: 0.76,
+  coolantRadius: 0.94,
+  coreRadius: 0.72,
 } as const;
 
 export function buildWarden03(mats: MaterialLibrary): WardenRig {

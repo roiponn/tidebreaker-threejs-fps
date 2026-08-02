@@ -100,13 +100,12 @@ export class HarborLevel {
     this.buildWarehouse();
     this.factory = new FactoryMission(mats, collision);
     this.root.add(this.factory.group);
-    // Three real spill lights keep the new 50m-deep interior readable. The
-    // remaining ceiling bars are emissive-only, preserving the forward-light
-    // budget while these anchor the three combat zones.
-    this.practicals.addStripLight(new THREE.Vector3(29, 5.8, 29.5), 0, 4.2, true);
-    this.practicals.addStripLight(new THREE.Vector3(32, 6.1, 43.5), 0, 4.2, true);
-    this.practicals.addStripLight(new THREE.Vector3(25.5, 5.7, 53), 0, 4.2, true);
-    this.practicals.addStripLight(new THREE.Vector3(17, 3.0, 52), Math.PI / 2, 2.4);
+    // Brighter, wider pools keep stage two readable without lifting the whole
+    // exterior exposure. Each real fixture covers one traversal/boss zone.
+    this.practicals.addStripLight(new THREE.Vector3(29, 5.8, 27.5), 0, 4.2, true, 2.25, 18);
+    this.practicals.addStripLight(new THREE.Vector3(32, 6.1, 40.5), 0, 4.2, true, 2.25, 18);
+    this.practicals.addStripLight(new THREE.Vector3(31, 5.9, 51.5), 0, 4.2, true, 2.5, 19);
+    this.practicals.addStripLight(new THREE.Vector3(17, 3.0, 52), Math.PI / 2, 2.4, true, 1.8, 14);
     this.buildQuay();
     this.buildPierHead();
     this.buildOverheadCables();

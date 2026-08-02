@@ -101,12 +101,10 @@ import { buildWarden03, WARDEN_METRICS, type WardenRig } from './Warden03';
  * file's owner adds a field for it - this is the one boss constant that is not
  * yet centralised, and it is called out rather than hidden.
  *
- * 240 is about four seconds of sustained fire from the MK-7 (26 damage,
- * 720rpm), which is long enough that the player has to commit to a flank and
- * short enough that they are not standing still while a four-metre machine
- * walks at them.
+ * 150 takes roughly six direct MK-7 hits. Both relays still require a flank,
+ * but the player can break each one during a short opening.
  */
-const RELAY_HEALTH = 240;
+const RELAY_HEALTH = 150;
 
 /** Phase 2 vent rhythm. See `updatePurge()`. */
 const PURGE_INTERVAL = 9.5;
@@ -154,18 +152,18 @@ const ATTACKS: Record<AttackDef['kind'], AttackDef> = {
   // Backhand sweep with the rescue clamp. It is the motion of clearing debris
   // off a casualty, and it passes through chest height - which is precisely why
   // crouching beats it.
-  sweep: { kind: 'sweep', windup: 1.15, strike: 0.3, recover: 0.85, minRange: 0, maxRange: 8.5, halfAngle: 0.95, damage: 18, cooldown: 3.4 },
+  sweep: { kind: 'sweep', windup: 1.3, strike: 0.3, recover: 1.0, minRange: 0, maxRange: 8.5, halfAngle: 0.95, damage: 12, cooldown: 4.2 },
   // Both manipulators driven into the deck. Expanding ring on the floor.
-  slam: { kind: 'slam', windup: 1.4, strike: 0.2, recover: 1.15, minRange: 0, maxRange: 12, halfAngle: Math.PI, damage: 22, cooldown: 6.2 },
+  slam: { kind: 'slam', windup: 1.65, strike: 0.2, recover: 1.35, minRange: 0, maxRange: 12, halfAngle: Math.PI, damage: 15, cooldown: 7.2 },
   // Fire suppressant. Barely hurts; it BLINDS, and that is the threat - it is
   // how a rescue rig moves someone who will not move: it makes the area
   // untenable rather than making the person dead.
-  foam: { kind: 'foam', windup: 2.2, strike: 1.6, recover: 1.0, minRange: 4, maxRange: 15, halfAngle: 0.5, damage: 7, cooldown: 8.5 },
+  foam: { kind: 'foam', windup: 2.4, strike: 1.4, recover: 1.15, minRange: 4, maxRange: 15, halfAngle: 0.5, damage: 4, cooldown: 9.5 },
   // Cutting torch. The single most dangerous thing on the machine and also the
   // shortest ranged - standing still next to it is the only way to be hit.
-  torch: { kind: 'torch', windup: 0.95, strike: 0.45, recover: 1.0, minRange: 0, maxRange: 5.2, halfAngle: 0.6, damage: 28, cooldown: 5.0 },
+  torch: { kind: 'torch', windup: 1.2, strike: 0.4, recover: 1.2, minRange: 0, maxRange: 5.2, halfAngle: 0.6, damage: 18, cooldown: 6.2 },
   // Emergency-power rush. Straight line only; it cannot steer mid-charge.
-  charge: { kind: 'charge', windup: 1.1, strike: 1.5, recover: 1.3, minRange: 7, maxRange: 24, halfAngle: 0.38, damage: 26, cooldown: 7.5 },
+  charge: { kind: 'charge', windup: 1.4, strike: 1.35, recover: 1.55, minRange: 7, maxRange: 24, halfAngle: 0.38, damage: 18, cooldown: 9.0 },
 };
 
 const PHASE_ATTACKS: Record<number, AttackDef['kind'][]> = {
@@ -175,14 +173,13 @@ const PHASE_ATTACKS: Record<number, AttackDef['kind'][]> = {
 };
 
 /**
- * Wind-up scaling per phase. Phase 3 is FASTER but never faster than the
- * readability floor: 0.78 x 0.95s (torch) is still 0.74s, and the floor below
- * clamps anything that would drop under it.
+ * Wind-up scaling per phase. Later phases accelerate slightly, while keeping
+ * every warning long enough to read and dodge.
  */
-const PHASE_WINDUP_SCALE: Record<number, number> = { 1: 1, 2: 0.92, 3: 0.78 };
+const PHASE_WINDUP_SCALE: Record<number, number> = { 1: 1.08, 2: 1.02, 3: 0.94 };
 const WINDUP_FLOOR = 0.75;
 
-const MOVE_SPEED: Record<number, number> = { 1: 1.65, 2: 1.85, 3: 3.0 };
+const MOVE_SPEED: Record<number, number> = { 1: 1.25, 2: 1.4, 3: 2.0 };
 
 // ---------------------------------------------------------------------
 // A minimal self-contained particle emitter
@@ -729,15 +726,13 @@ export class Warden03Controller {
    *
    * PER-PHASE MODEL
    *   phase 1  relay sphere -> full damage to that relay
-   *            anything else -> amount * sealedDamageScale (0.03), DISCARDED.
+   *            anything else -> reduced damage routed to the current relay.
    *            Phase 1 is not a health bar. Chipping the hull must never be a
    *            slower way to win, or the relays stop being the objective.
    *   phase 2  coolant sphere -> full damage, x1.7 during a purge
-   *            anything else -> sealed scale, discarded
+   *            anything else -> reduced damage routed to the coolant stack
    *   phase 3  core sphere -> full damage
-   *            anything else -> discarded, but it sparks loudly, because the
-   *            armour is gone and a player shooting a bare chassis deserves the
-   *            feedback even though it is not progress.
+   *            anything else -> reduced damage routed to the exposed core
    */
   damage(amount: number, worldPoint: THREE.Vector3): void {
     if (this.state === 'dormant' || this.state === 'dying' || this.state === 'down') return;
@@ -747,20 +742,7 @@ export class Warden03Controller {
       for (let i = 0; i < this.relayHealth.length; i++) {
         if (this.relayHealth[i] <= 0) continue;
         if (worldPoint.distanceToSquared(this.relayWorld[i]) > sq(WARDEN_METRICS.relayRadius)) continue;
-        this.relayHealth[i] -= amount;
-        this.relayFlash[i] = 1;
-        this.staggerMeter += amount;
-        this.emitSparks(worldPoint, 6, 0.9, 1.0, 0.55);
-        const dead = this.relayHealth[i] <= 0;
-        this.bus.emit('boss:weakPointHit', {
-          kind: 'relay',
-          point: worldPoint.clone(),
-          normal: new THREE.Vector3().subVectors(worldPoint, this.relayWorld[i]).normalize(),
-          damage: amount,
-          health01: clamp01(Math.max(0, this.relayHealth[i]) / RELAY_HEALTH),
-          destroyed: dead,
-        });
-        if (dead) this.onRelayDestroyed(i);
+        this.applyRelayDamage(i, amount, worldPoint);
         return;
       }
       this.absorb(amount, worldPoint);
@@ -770,22 +752,7 @@ export class Warden03Controller {
     if (this.phaseIndex === 2) {
       if (worldPoint.distanceToSquared(this.coolantWorld) <= sq(WARDEN_METRICS.coolantRadius)) {
         const applied = amount * (this.purgeActive ? PURGE_VULNERABILITY : 1);
-        this.coolantHealth -= applied;
-        this.coolantFlash = 1;
-        this.staggerMeter += applied;
-        this.emitSparks(worldPoint, 9, 1.0, 0.72, 0.3);
-        this.emitSteam(worldPoint, 4, 1.1);
-        const dead = this.coolantHealth <= 0;
-        this.bus.emit('boss:weakPointHit', {
-          kind: 'coolant',
-          point: worldPoint.clone(),
-          normal: new THREE.Vector3().subVectors(worldPoint, this.coolantWorld).normalize(),
-          damage: applied,
-          health01: clamp01(this.coolantHealth / MISSION_V2.boss.phase2CoolantHealth),
-          destroyed: dead,
-        });
-        this.updateCoolantStage();
-        if (dead) this.onCoolantDestroyed();
+        this.applyCoolantDamage(applied, worldPoint);
         return;
       }
       this.absorb(amount, worldPoint);
@@ -793,23 +760,66 @@ export class Warden03Controller {
     }
 
     if (worldPoint.distanceToSquared(this.coreWorld) <= sq(WARDEN_METRICS.coreRadius)) {
-      this.coreHealth -= amount;
-      this.coreFlash = 1;
-      this.staggerMeter += amount;
-      this.emitSparks(worldPoint, 8, 0.55, 0.85, 1.0);
-      const dead = this.coreHealth <= 0;
-      this.bus.emit('boss:weakPointHit', {
-        kind: 'core',
-        point: worldPoint.clone(),
-        normal: new THREE.Vector3().subVectors(worldPoint, this.coreWorld).normalize(),
-        damage: amount,
-        health01: clamp01(this.coreHealth / MISSION_V2.boss.phase3CoreHealth),
-        destroyed: dead,
-      });
-      if (dead) this.onCoreDestroyed();
+      this.applyCoreDamage(amount, worldPoint);
       return;
     }
     this.absorb(amount, worldPoint);
+  }
+
+  private applyRelayDamage(index: number, amount: number, worldPoint: THREE.Vector3): void {
+    if (this.relayHealth[index] <= 0) return;
+    this.relayHealth[index] -= amount;
+    this.relayFlash[index] = 1;
+    this.staggerMeter += amount;
+    this.emitSparks(worldPoint, 6, 0.9, 1.0, 0.55);
+    const dead = this.relayHealth[index] <= 0;
+    this.bus.emit('boss:weakPointHit', {
+      kind: 'relay',
+      point: worldPoint.clone(),
+      normal: new THREE.Vector3().subVectors(worldPoint, this.relayWorld[index]).normalize(),
+      damage: amount,
+      health01: clamp01(Math.max(0, this.relayHealth[index]) / RELAY_HEALTH),
+      destroyed: dead,
+    });
+    if (dead) this.onRelayDestroyed(index);
+  }
+
+  private applyCoolantDamage(amount: number, worldPoint: THREE.Vector3): void {
+    if (this.coolantHealth <= 0) return;
+    this.coolantHealth -= amount;
+    this.coolantFlash = 1;
+    this.staggerMeter += amount;
+    this.emitSparks(worldPoint, 9, 1.0, 0.72, 0.3);
+    this.emitSteam(worldPoint, 4, 1.1);
+    const dead = this.coolantHealth <= 0;
+    this.bus.emit('boss:weakPointHit', {
+      kind: 'coolant',
+      point: worldPoint.clone(),
+      normal: new THREE.Vector3().subVectors(worldPoint, this.coolantWorld).normalize(),
+      damage: amount,
+      health01: clamp01(this.coolantHealth / MISSION_V2.boss.phase2CoolantHealth),
+      destroyed: dead,
+    });
+    this.updateCoolantStage();
+    if (dead) this.onCoolantDestroyed();
+  }
+
+  private applyCoreDamage(amount: number, worldPoint: THREE.Vector3): void {
+    if (this.coreHealth <= 0) return;
+    this.coreHealth -= amount;
+    this.coreFlash = 1;
+    this.staggerMeter += amount;
+    this.emitSparks(worldPoint, 8, 0.55, 0.85, 1.0);
+    const dead = this.coreHealth <= 0;
+    this.bus.emit('boss:weakPointHit', {
+      kind: 'core',
+      point: worldPoint.clone(),
+      normal: new THREE.Vector3().subVectors(worldPoint, this.coreWorld).normalize(),
+      damage: amount,
+      health01: clamp01(this.coreHealth / MISSION_V2.boss.phase3CoreHealth),
+      destroyed: dead,
+    });
+    if (dead) this.onCoreDestroyed();
   }
 
   // ==================================================================
@@ -1463,17 +1473,26 @@ export class Warden03Controller {
   }
 
   private absorb(amount: number, worldPoint: THREE.Vector3): void {
-    const scale = this.phaseIndex === 3 ? 0 : MISSION_V2.boss.sealedDamageScale;
-    // Sparks and a ricochet whine, but no progress. The feedback has to be
-    // POSITIVE and USELESS at the same time - the player must be able to tell
-    // that they hit, and equally able to tell that it did nothing.
+    const scale = this.phaseIndex === 3
+      ? MISSION_V2.boss.exposedBodyDamageScale
+      : MISSION_V2.boss.sealedDamageScale;
+    // Armour hits make reduced progress. Weak-point shots remain far faster,
+    // but a player who has not understood the silhouette is never hard-locked.
     this.emitSparks(worldPoint, 4, 1.0, 0.9, 0.72);
     this.bus.emit('boss:armourHit', {
       point: worldPoint.clone(),
       normal: new THREE.Vector3().subVectors(worldPoint, this.coreWorld).normalize(),
       absorbed: 1 - scale,
     });
-    void amount;
+    const applied = amount * scale;
+    if (this.phaseIndex === 1) {
+      const relay = this.relayHealth.findIndex((health) => health > 0);
+      if (relay >= 0) this.applyRelayDamage(relay, applied, worldPoint);
+    } else if (this.phaseIndex === 2) {
+      this.applyCoolantDamage(applied, worldPoint);
+    } else {
+      this.applyCoreDamage(applied, worldPoint);
+    }
   }
 
   // ==================================================================

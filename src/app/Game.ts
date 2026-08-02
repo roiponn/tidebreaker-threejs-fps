@@ -1145,14 +1145,21 @@ export class Game {
 
     const objectivePoint = this.getObjectivePoint(this.tmpVec2);
     const objectiveDistance = objectivePoint.distanceTo(this.player.position);
+    const markerLabel = state === 'ACCESS_MODULE_DROPPED'
+      ? `アクセスモジュール // ${objectiveDistance.toFixed(0)}m`
+      : state === 'BOSS_PHASE_1'
+        ? `緑の電力リレーを撃つ // ${objectiveDistance.toFixed(0)}m`
+        : state === 'BOSS_PHASE_2'
+          ? `背面の橙色冷却装置を撃つ // ${objectiveDistance.toFixed(0)}m`
+          : state === 'BOSS_PHASE_3'
+            ? `胸部の赤いAIコアを撃つ // ${objectiveDistance.toFixed(0)}m`
+            : `${objectiveDistance.toFixed(0)}m`;
     this.hud.updateMarker(
       objectivePoint,
       this.view.camera,
       this.director.phase === 'active' && state !== 'TRUTH_REVEAL',
-      state === 'ACCESS_MODULE_DROPPED'
-        ? `アクセスモジュール // ${objectiveDistance.toFixed(0)}m`
-        : `${objectiveDistance.toFixed(0)}m`,
-      state === 'ACCESS_MODULE_DROPPED',
+      markerLabel,
+      state === 'ACCESS_MODULE_DROPPED' || state.startsWith('BOSS_PHASE_'),
     );
 
     const stats = this.vfx.stats;

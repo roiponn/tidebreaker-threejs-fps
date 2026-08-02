@@ -257,7 +257,14 @@ export class Practicals {
    * fixture on its own; only strips that need to actually spill light onto
    * geometry (the open roller door) pay for a real light.
    */
-  addStripLight(position: THREE.Vector3, rotationY: number, length: number, withLight = false): void {
+  addStripLight(
+    position: THREE.Vector3,
+    rotationY: number,
+    length: number,
+    withLight = false,
+    intensityScale = 1,
+    lightDistance = 13,
+  ): void {
     const p = this.visual.practicals;
     const geo = new THREE.BoxGeometry(length, 0.06, 0.14);
     const mesh = new THREE.Mesh(geo, this.mats.emissive('strip', p.stripColor, 4.5));
@@ -269,7 +276,12 @@ export class Practicals {
 
     let light: THREE.Light;
     if (withLight) {
-      const point = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
+      const point = new THREE.PointLight(
+        p.stripColor,
+        p.stripIntensity * length * intensityScale,
+        lightDistance,
+        2,
+      );
       point.position.copy(position).add(new THREE.Vector3(0, -0.15, 0));
       point.layers.enable(LAYER.VIEWMODEL);
       this.group.add(point);
@@ -279,7 +291,12 @@ export class Practicals {
       // A detached light object: the flicker system still drives its intensity,
       // which drives the emissive mesh, but it is never added to the scene and
       // so costs nothing in the shader.
-      light = new THREE.PointLight(p.stripColor, p.stripIntensity * length, 13, 2);
+      light = new THREE.PointLight(
+        p.stripColor,
+        p.stripIntensity * length * intensityScale,
+        lightDistance,
+        2,
+      );
     }
 
     // Fluorescents are the classic failing fixture; most of these stutter.

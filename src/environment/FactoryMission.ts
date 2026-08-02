@@ -112,9 +112,7 @@ export class FactoryMission {
 
   readonly robotSpawns: readonly FactoryRobotSpawn[] = [
     this.robotSpawn('sentinel', 'loading', 27, 19.5, 31, 20.5, 15),
-    this.robotSpawn('scout', 'manufacturing', 23.5, 27, 26.5, 29, 23),
     this.robotSpawn('sentinel', 'manufacturing', 38, 32, 35.5, 34.5, 27),
-    this.robotSpawn('scout', 'manufacturing', 30, 37, 33, 36, 32),
     this.robotSpawn('sentinel', 'control', 40, 43, 38, 47, 39),
   ];
 
